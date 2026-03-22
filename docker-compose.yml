@@ -83,7 +83,8 @@ services:
 # =============================================================================
 volumes:
   neuron-memory:
-    driver: local
+    external: true
+    name: cvg_neuron_neuron-memory
 
 # =============================================================================
 # Networks
