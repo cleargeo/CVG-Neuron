@@ -1,0 +1,133 @@
+; =============================================================================
+; CVG BIND9 Zone File Template — cleargeo.tech
+; Managed by CVG DNS Support Engine (port 8810)
+; (c) Clearview Geographic, LLC — Proprietary
+;
+; INSTRUCTIONS:
+;   1. Copy this file to /opt/cvg/bind/zones/cleargeo.tech.zone on ns1
+;   2. Replace ALL [PLACEHOLDER] values with real IPs/data
+;   3. Fill in records exported from HostGator (Phase 1 of playbook)
+;   4. Increment serial on every change (format: YYYYMMDDNN)
+;   5. After editing: docker exec bind9-primary rndc reload cleargeo.tech
+; =============================================================================
+
+$ORIGIN cleargeo.tech.
+$TTL 300                ; Start with 5-min TTL during migration; raise to 3600 after
+
+; ---------------------------------------------------------------------------
+; SOA — Start of Authority
+; ---------------------------------------------------------------------------
+@   IN  SOA  ns1.cleargeo.tech. hostmaster.cleargeo.tech. (
+            2026032201  ; Serial       — YYYYMMDDNN (increment each change)
+            3600        ; Refresh      — secondary checks primary every 1h
+            900         ; Retry        — retry failed refresh every 15min
+            604800      ; Expire       — secondary serves stale after 7 days
+            300 )       ; Negative TTL — cache NXDOMAIN for 5 min
+
+; ---------------------------------------------------------------------------
+; Nameservers (NS)
+; ---------------------------------------------------------------------------
+@   IN  NS   ns1.cleargeo.tech.
+@   IN  NS   ns2.cleargeo.tech.
+
+; Glue A records — MUST match what is registered at HostGator registrar
+ns1 IN  A    [NS1_PUBLIC_IP]    ; e.g. 1.2.3.4  — public IP of cvg-stormsurge-01
+ns2 IN  A    [NS2_PUBLIC_IP]    ; e.g. 5.6.7.8  — public IP of ns2 node
+
+; ---------------------------------------------------------------------------
+; Root domain A record
+; ---------------------------------------------------------------------------
+@   IN  A    [MAIN_PUBLIC_IP]   ; Primary public-facing IP for cleargeo.tech
+
+; ---------------------------------------------------------------------------
+; WWW
+; ---------------------------------------------------------------------------
+www IN  A    [MAIN_PUBLIC_IP]
+; www IN  CNAME  @              ; Alternative: CNAME to root
+
+; ---------------------------------------------------------------------------
+; CVG Service Subdomains
+; (replace IPs with actual public-facing or port-forwarded IPs)
+; ---------------------------------------------------------------------------
+
+; Gitea — self-hosted git
+git     IN  A    [GITEA_PUBLIC_IP]
+
+; CVG Neuron AI
+neuron  IN  A    [NEURON_PUBLIC_IP]
+
+; CVG DNS Support Engine (internal mgmt — may not need public record)
+; dns     IN  A    [DNS_ENGINE_IP]
+
+; Proxmox / Hive management (if externally exposed)
+; proxmox IN  A    [PROXMOX_PUBLIC_IP]
+
+; Any other CVG services — add here
+; [subdomain]  IN  A    [IP]
+
+; ---------------------------------------------------------------------------
+; Mail (MX)
+; ---------------------------------------------------------------------------
+; Priority 10 = primary, 20 = secondary/backup
+@   IN  MX  10  mail.cleargeo.tech.
+
+; Mail server A record (if self-hosted)
+; mail    IN  A    [MAIL_SERVER_IP]
+
+; If using Google Workspace:
+; @   IN  MX  1   aspmx.l.google.com.
+; @   IN  MX  5   alt1.aspmx.l.google.com.
+; @   IN  MX  5   alt2.aspmx.l.google.com.
+; @   IN  MX  10  alt3.aspmx.l.google.com.
+; @   IN  MX  10  alt4.aspmx.l.google.com.
+
+; If using Microsoft 365:
+; @   IN  MX  0   [tenant].mail.protection.outlook.com.
+
+; ---------------------------------------------------------------------------
+; Email Authentication (TXT)
+; CRITICAL: Copy these EXACTLY from HostGator export or email will break
+; ---------------------------------------------------------------------------
+
+; SPF — authorize mail sending IPs
+@   IN  TXT  "v=spf1 ip4:[MAIL_SERVER_IP] include:[PROVIDER_SPF] ~all"
+; Example for self-hosted: "v=spf1 ip4:1.2.3.4 ~all"
+; Example for Google:      "v=spf1 include:_spf.google.com ~all"
+
+; DMARC — policy for failed SPF/DKIM
+_dmarc  IN  TXT  "v=DMARC1; p=none; rua=mailto:postmaster@cleargeo.tech; ruf=mailto:postmaster@cleargeo.tech; fo=1"
+; Start with p=none (monitor), then move to p=quarantine then p=reject
+
+; DKIM — copy the FULL key from HostGator export
+; The selector name (e.g. "default") must match what your mail server uses
+; default._domainkey  IN  TXT  "v=DKIM1; k=rsa; p=[YOUR_VERY_LONG_DKIM_PUBLIC_KEY]"
+
+; ---------------------------------------------------------------------------
+; CAA — Certificate Authority Authorization (optional but recommended)
+; Restricts which CAs can issue SSL certs for your domain
+; ---------------------------------------------------------------------------
+; @   IN  CAA  0 issue "letsencrypt.org"
+; @   IN  CAA  0 issuewild "letsencrypt.org"
+
+; ---------------------------------------------------------------------------
+; SRV records (if applicable — VoIP, XMPP, etc.)
+; ---------------------------------------------------------------------------
+; _service._proto  IN  SRV  priority weight port target
+; e.g.:
+; _sip._tcp   IN  SRV  10 60 5060 sip.cleargeo.tech.
+
+; ---------------------------------------------------------------------------
+; Verification / ownership TXT records
+; (copy any existing TXT records from HostGator — Google Search Console, etc.)
+; ---------------------------------------------------------------------------
+; @   IN  TXT  "google-site-verification=XXXXXXXX"
+; @   IN  TXT  "MS=XXXXXXXX"   ; Microsoft 365 domain verification
+
+; =============================================================================
+; END OF ZONE FILE
+; =============================================================================
+; After populating:
+;   1. Validate: docker exec bind9-primary named-checkzone cleargeo.tech /var/lib/bind/cleargeo.tech.zone
+;   2. Reload:   docker exec bind9-primary rndc reload cleargeo.tech
+;   3. Test:     dig @[NS1_PUBLIC_IP] cleargeo.tech SOA
+; =============================================================================

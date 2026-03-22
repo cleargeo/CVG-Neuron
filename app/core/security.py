@@ -30,11 +30,30 @@ bearer_scheme = HTTPBearer(auto_error=False)
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 # ── Built-in service API keys (for internal CVG system calls) ─────────────────
-# In production, these should be stored in CVG StratoVault / environment vars
+# Each internal service must have its OWN independent secret stored in the
+# environment (CVG StratoVault / .env).  We NEVER derive service keys by
+# slicing the user-facing JWT secret — that leaks the master secret if any
+# service key is ever exposed.
+import os as _os
+
+def _load_service_key(env_var: str, fallback_name: str) -> str:
+    """Load a service key from env; generate a stable fallback for dev only."""
+    val = _os.environ.get(env_var, "")
+    if val:
+        return val
+    # Dev-mode fallback: derive a HMAC of the secret with a fixed label so
+    # different services still get different, non-overlapping keys.
+    import hmac, hashlib
+    return hmac.new(
+        settings.secret_key.encode(),
+        fallback_name.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
 INTERNAL_SERVICE_KEYS: Dict[str, str] = {
-    "CVG-HIVE": settings.secret_key[:16],      # Truncated for demo — use real keys
-    "CVG-COMB": settings.secret_key[16:32],
-    "CVG-OBSERVABILITY": settings.secret_key[8:24],
+    "CVG-HIVE":          _load_service_key("CVG_HIVE_SERVICE_KEY",          "cvg-hive"),
+    "CVG-COMB":          _load_service_key("CVG_COMB_SERVICE_KEY",          "cvg-comb"),
+    "CVG-OBSERVABILITY": _load_service_key("CVG_OBSERVABILITY_SERVICE_KEY", "cvg-observability"),
 }
 
 

@@ -24,6 +24,8 @@ from .memory import get_memory
 from .cluster import get_cluster
 from .ollama_client import get_ollama_client
 from .context_builder import get_cached_context, build_context_string
+from .forge_manager import is_forge_query, extract_forge_command, get_forge_manager, get_forge_context
+from .dns_manager import is_dns_query, handle_dns_command, build_dns_context
 
 logger = logging.getLogger('neuron.mind')
 
@@ -106,20 +108,28 @@ class NeuronMind:
         _step_log('RECALL', f'query={repr(message[:60])}')
 
         mem = self.memory
-        working_recent  = mem.working.recent(10)
-        episodic_recent = mem.episodic.recent(5)
-        semantic_facts  = mem.semantic.search(message, limit=8)
-        procedures      = mem.procedural.match(message, limit=3)
+        working_recent  = mem.working.recent(15)         # increased from 10
+        episodic_recent = mem.episodic.recent(8)         # increased from 5
+        semantic_facts  = mem.semantic.search(message, limit=12)  # increased from 8
+        procedures      = mem.procedural.match(message, limit=5)  # increased from 3
+        # New in v3: associative links and recent cross-terminal captures
+        associations    = mem.associative.recall_links(message, min_strength=0.4)
+        ext_captures    = [c for c in mem.capture.recent(10)
+                           if c.get('source') not in ('neuron', '')][:5]
 
         elapsed = (time.monotonic() - t0) * 1000
-        _step_log('RECALL', f'semantic={len(semantic_facts)} episodic={len(episodic_recent)}', elapsed)
+        _step_log('RECALL',
+                  f'semantic={len(semantic_facts)} episodic={len(episodic_recent)} '
+                  f'captures={len(ext_captures)}', elapsed)
 
         return {
-            'working':    working_recent,
-            'episodic':   episodic_recent,
-            'semantic':   semantic_facts,
-            'procedural': procedures,
-            'elapsed_ms': elapsed,
+            'working':      working_recent,
+            'episodic':     episodic_recent,
+            'semantic':     semantic_facts,
+            'procedural':   procedures,
+            'associations': associations,
+            'ext_captures': ext_captures,
+            'elapsed_ms':   elapsed,
         }
 
     # ==========================================================================
@@ -148,16 +158,25 @@ class NeuronMind:
         ]
         msg_lower = message.lower()
         wants_live = any(t in msg_lower for t in live_triggers)
+        # Forge detection
+        wants_forge = is_forge_query(message)
+        forge_cmd   = extract_forge_command(message) if wants_forge else None
+
+        # DNS detection
+        wants_dns = is_dns_query(message)
 
         elapsed = (time.monotonic() - t0) * 1000
         _step_log('ASSESS',
                   f'base_conf={base_confidence:.2f} wants_live={wants_live} '
-                  f'semantic_hits={len(semantic_hits)}', elapsed)
+                  f'wants_dns={wants_dns} semantic_hits={len(semantic_hits)}', elapsed)
 
         return {
             'has_memory':       len(semantic_hits) > 0 or len(episodic_hits) > 0,
             'memory_facts':     len(semantic_hits),
-            'wants_live_data':  wants_live,
+            'wants_live_data':  wants_live or wants_forge or wants_dns,
+            'wants_forge':      wants_forge,
+            'forge_command':    forge_cmd,
+            'wants_dns':        wants_dns,
             'has_procedure':    len(procedural_hit) > 0,
             'procedure':        procedural_hit[0] if procedural_hit else None,
             'base_confidence':  base_confidence,
@@ -219,10 +238,61 @@ class NeuronMind:
                 logger.warning('Could not fetch live context: %s', exc)
                 live_context_block = 'Live engine data temporarily unavailable.'
 
+        # Forge context injection — real-time status from all Forge/Queen nodes
+        forge_context_block = ''
+        if assessment.get('wants_forge'):
+            try:
+                forge_context_block = await get_forge_context()
+                if forge_context_block and len(forge_context_block) > 30:
+                    confidence_delta += 0.15  # forge data is highly relevant
+                    logger.debug('[REASON] Forge context injected (%d chars)', len(forge_context_block))
+
+                # If a specific forge command was extracted, execute it and prepend result
+                forge_cmd = assessment.get('forge_command')
+                if forge_cmd:
+                    try:
+                        fm = get_forge_manager()
+                        forge_result = await fm.dispatch_command(forge_cmd)
+                        result_text = forge_result.get('summary', '')
+                        if not result_text:
+                            result_text = (forge_result.get('stdout', '') or
+                                           str(forge_result.get('status', '')))[:2000]
+                        if result_text:
+                            forge_context_block = (
+                                f'[FORGE COMMAND: {forge_cmd}]\n{result_text}\n\n'
+                                + forge_context_block
+                            )
+                    except Exception as fexc:
+                        logger.debug('Forge command dispatch failed: %s', fexc)
+            except Exception as exc:
+                logger.warning('Could not fetch forge context: %s', exc)
+
+        # DNS context injection — real-time DNS/migration status
+        dns_context_block = ''
+        if assessment.get('wants_dns'):
+            try:
+                dns_context_block = await build_dns_context()
+                if dns_context_block and len(dns_context_block) > 30:
+                    confidence_delta += 0.15
+                    logger.debug('[REASON] DNS context injected (%d chars)', len(dns_context_block))
+                # For direct DNS commands (status/migrate/records), also dispatch and prepend result
+                dns_result = await handle_dns_command(message)
+                if dns_result:
+                    dns_context_block = (
+                        f'[DNS COMMAND RESULT]\n{dns_result}\n\n'
+                        + dns_context_block
+                    )
+            except Exception as exc:
+                logger.warning('Could not fetch DNS context: %s', exc)
+
         # Compose final user message
         user_message = message
         if live_context_block:
             user_message = f'{message}\n\n[LIVE PLATFORM DATA]\n{live_context_block}'
+        if forge_context_block:
+            user_message = f'{user_message}\n\n[FORGE STATUS]\n{forge_context_block}'
+        if dns_context_block:
+            user_message = f'{user_message}\n\n[DNS STATUS]\n{dns_context_block}'
 
         # Trim and build message history
         history = _trim_history(conversation_history, MAX_CONVERSATION_HISTORY)
@@ -615,20 +685,40 @@ class NeuronMind:
         semantic = recalled.get('semantic', [])
         if semantic:
             lines.append('Known facts:')
-            for f in semantic[:6]:
-                lines.append(f'  - {f.get("key", "?")}: {str(f.get("value", ""))[:100]}')
+            for f in semantic[:8]:
+                lines.append(f'  - {f.get("key", "?")}: {str(f.get("value", ""))[:120]}')
         episodic = recalled.get('episodic', [])
         if episodic:
             lines.append('Recent episodes:')
-            for ep in episodic[:3]:
-                lines.append(f'  - {ep.get("summary", "")[:120]}')
+            for ep in episodic[:5]:
+                src = ep.get('source', '')
+                src_tag = f'[{src}] ' if src and src not in ('neuron', '') else ''
+                lines.append(f'  - {src_tag}{ep.get("summary", "")[:140]}')
         working = recalled.get('working', [])
         if working:
             lines.append('Working context (recent turns):')
-            for w in working[-4:]:
+            for w in working[-6:]:
                 role = w.get('role', '?')
-                content = str(w.get('content', ''))[:100]
-                lines.append(f'  [{role}] {content}')
+                content = str(w.get('content', ''))[:120]
+                src = w.get('source', '')
+                src_tag = f'[{src}]' if src and src not in ('neuron', '') else ''
+                lines.append(f'  {src_tag}[{role}] {content}')
+        # New v3: cross-terminal captures
+        ext_captures = recalled.get('ext_captures', [])
+        if ext_captures:
+            lines.append('Cross-terminal AI activity (other tools on this machine):')
+            for cap in ext_captures[:3]:
+                src  = cap.get('source', '?')
+                role = cap.get('role', '?')
+                content = cap.get('content', '')[:120]
+                ts = cap.get('timestamp', '')[:16]
+                lines.append(f'  [{ts}][{src}/{role}] {content}')
+        # New v3: associative links
+        associations = recalled.get('associations', [])
+        if associations:
+            lines.append('Related concept links:')
+            for a in associations[:3]:
+                lines.append(f'  {a["concept_a"]} --[{a["relation"]}]--> {a["concept_b"]}')
         return '\n'.join(lines) if lines else 'No prior memory for this query.'
 
 

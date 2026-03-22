@@ -136,6 +136,21 @@ class LearnRequest(BaseModel):
     confidence: float = Field(default=0.9, ge=0.0, le=1.0)
 
 
+class CaptureRequest(BaseModel):
+    source: str = Field(..., min_length=1, max_length=100,
+                        description='AI tool name: cline, claude-cli, aider, copilot, custom, etc.')
+    content: str = Field(..., min_length=1, max_length=8000)
+    role: str = Field(default='assistant', pattern='^(user|assistant|system)$')
+    model: Optional[str] = Field(default=None, max_length=100)
+    terminal_id: Optional[str] = Field(default=None, max_length=200)
+    session_id: Optional[str] = Field(default=None, max_length=200)
+    metadata: Optional[Dict[str, Any]] = Field(default=None)
+
+
+class CaptureBatchRequest(BaseModel):
+    captures: List[CaptureRequest] = Field(..., min_length=1, max_length=50)
+
+
 class EdgeRegisterRequest(BaseModel):
     edge_id: str = Field(..., min_length=1, max_length=100)
     endpoint: str = Field(..., min_length=1)
@@ -208,9 +223,62 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning('Cluster scan task failed to start: %s', exc)
 
+    # Start embedded capture daemon (universal terminal capture on port 8098)
+    try:
+        from .memory_capture import start_embedded_capture_server
+        start_embedded_capture_server()
+    except Exception as exc:
+        logger.warning('Capture daemon startup failed (non-fatal): %s', exc)
+
+    # Start project feeder — autonomous feed from all CVG support engine directories
+    try:
+        from .project_feeder import start_project_feeder, get_feeder_stats
+        start_project_feeder()
+        fstats = get_feeder_stats()
+        active = sum(1 for p in fstats.get('projects', []) if p.get('exists'))
+        logger.info('Project feeder started — %d/%d project dirs active',
+                    active, len(fstats.get('projects', [])))
+    except Exception as exc:
+        logger.warning('Project feeder startup failed (non-fatal): %s', exc)
+
+    # Start history harvester — reads Cline, Claude Desktop, Copilot, Aider + hive nodes
+    try:
+        from .history_harvester import start_history_harvester
+        start_history_harvester()
+        logger.info('History harvester started (Cline/Claude/Copilot/Aider + Hive SSH)')
+    except Exception as exc:
+        logger.warning('History harvester startup failed (non-fatal): %s', exc)
+
+    # Start hive preloader — deep one-time memory preload from all Queens/VMs/CTs/Forges
+    try:
+        from .hive_preloader import start_hive_preload_async, get_preload_status
+        start_hive_preload_async(force=False)  # skips already-preloaded nodes
+        pstatus = get_preload_status()
+        logger.info('Hive preloader started — %d/%d nodes already preloaded, %d pending',
+                    pstatus.get('preloaded', 0), pstatus.get('total_nodes', 0),
+                    pstatus.get('pending', 0))
+    except Exception as exc:
+        logger.warning('Hive preloader startup failed (non-fatal): %s', exc)
+
+    # Schedule memory consolidation every 15 minutes
+    try:
+        from .memory import get_memory as _get_memory
+        def _run_consolidation():
+            import asyncio
+            try:
+                mem = _get_memory()
+                actions = mem.consolidate()
+                logger.info('[scheduler] Consolidation: %s', actions)
+            except Exception as exc:
+                logger.warning('[scheduler] Consolidation failed: %s', exc)
+        scheduler.add_job(_run_consolidation, 'interval', minutes=15, id='mem_consolidate')
+    except Exception as exc:
+        logger.warning('Consolidation scheduler failed to register: %s', exc)
+
     scheduler.add_job(refresh_context, 'interval', minutes=5, id='ctx_refresh')
     scheduler.start()
     logger.info('Context refresh scheduler started (interval: 5 min)')
+    logger.info('Memory consolidation scheduler started (interval: 15 min)')
     logger.info('Rate limiting: %d req/min per IP', RATE_LIMIT_RPM)
     logger.info('CVG NEURON IS OPERATIONAL')
     yield
@@ -791,6 +859,589 @@ async def analyze_by_type(analysis_type: str, req: AnalyzeTypeRequest):
         'elapsed_ms':      result['elapsed_ms'],
         'verified':        result['verified'],
         'sources':         result.get('sources', []),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Universal memory capture endpoints (v3)
+# ---------------------------------------------------------------------------
+
+def _is_localhost(request: Request) -> bool:
+    host = request.client.host if request.client else ''
+    return host in ('127.0.0.1', '::1', 'localhost')
+
+
+@app.post('/api/memory/capture')
+async def memory_capture(req: CaptureRequest, request: Request):
+    '''
+    Universal AI terminal capture endpoint.
+    Accepts captures from any AI tool: Cline, Claude CLI, Aider, Copilot, etc.
+
+    No auth required from localhost (127.0.0.1) — use X-CVG-Key from external IPs.
+    Sources: cline, claude-cli, aider, copilot, llm-cli, sgpt, custom
+    '''
+    # Auth: localhost allowed without key; external IPs require CVG key
+    if not _is_localhost(request):
+        provided = request.headers.get('X-CVG-Key', '')
+        if provided != CVG_INTERNAL_KEY:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail='X-CVG-Key required from non-localhost')
+
+    mem = get_memory()
+    cap_id = mem.capture.ingest(
+        source=req.source,
+        content=req.content,
+        role=req.role,
+        model=req.model,
+        metadata=req.metadata,
+        terminal_id=req.terminal_id,
+        session_id=req.session_id,
+    )
+    logger.info('[capture] API: %s/%s from %s | %d chars', req.source, req.role,
+                req.terminal_id or req.source, len(req.content))
+
+    # Immediately feed high-value captures into working memory
+    if req.role in ('assistant', 'system') and len(req.content) > 50:
+        mem.working.add({
+            'role': req.role,
+            'content': req.content[:500],
+            'source': req.source,
+            'model': req.model,
+        })
+
+    return {
+        'status': 'captured',
+        'id': cap_id,
+        'source': req.source,
+        'unprocessed_total': mem.capture.unprocessed_count,
+    }
+
+
+@app.post('/api/memory/capture/batch')
+async def memory_capture_batch(req: CaptureBatchRequest, request: Request):
+    '''
+    Batch capture from any AI tool. Accepts up to 50 captures in one request.
+    '''
+    if not _is_localhost(request):
+        provided = request.headers.get('X-CVG-Key', '')
+        if provided != CVG_INTERNAL_KEY:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail='X-CVG-Key required from non-localhost')
+
+    mem = get_memory()
+    ids = []
+    for cap in req.captures:
+        cap_id = mem.capture.ingest(
+            source=cap.source,
+            content=cap.content,
+            role=cap.role,
+            model=cap.model,
+            metadata=cap.metadata,
+            terminal_id=cap.terminal_id,
+            session_id=cap.session_id,
+        )
+        ids.append(cap_id)
+
+    return {
+        'status': 'captured',
+        'count': len(ids),
+        'ids': ids,
+        'unprocessed_total': mem.capture.unprocessed_count,
+    }
+
+
+@app.get('/api/memory/captures', dependencies=[Depends(require_cvg_key)])
+async def memory_captures(limit: int = 50, source: Optional[str] = None):
+    '''
+    View recent AI terminal captures.
+    Filter by source: ?source=cline, ?source=claude-cli, etc.
+    '''
+    mem = get_memory()
+    captures = mem.capture.recent(n=min(limit, 200), source=source)
+    return {
+        'captures':    captures,
+        'count':       len(captures),
+        'sources':     mem.capture.sources(),
+        'total':       mem.capture.total,
+        'unprocessed': mem.capture.unprocessed_count,
+        'timestamp':   datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post('/api/memory/consolidate', dependencies=[Depends(require_cvg_key)])
+async def memory_consolidate():
+    '''
+    Trigger memory consolidation:
+      - Process pending captures from external AI terminals → episodic + semantic
+      - Promote repeated episodic patterns → semantic memory
+      - Create associative links between co-active sources
+
+    Called automatically every 15 minutes by the scheduler.
+    Can also be triggered manually or by the capture daemon.
+    '''
+    import asyncio as _asyncio
+    try:
+        mem = get_memory()
+        # Run blocking consolidation in thread pool to avoid blocking the event loop
+        actions = await _asyncio.to_thread(mem.consolidate)
+        return {
+            'status':  'consolidated',
+            'actions': actions,
+            'stats':   mem.stats(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        logger.error('Manual consolidation failed: %s', exc)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f'Consolidation failed: {exc}')
+
+
+@app.get('/api/memory/context', dependencies=[Depends(require_cvg_key)])
+async def memory_rich_context(query: str = ''):
+    '''
+    Return Neuron's full rich memory context, optionally filtered by query.
+    Includes semantic facts, recent episodes, working state, and cross-terminal captures.
+    Useful for debugging what Neuron "knows" right now.
+    '''
+    mem = get_memory()
+    return {
+        'context_text': mem.build_rich_context(query=query),
+        'query':        query,
+        'stats':        mem.stats(),
+        'timestamp':    datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get('/api/memory/feeder', dependencies=[Depends(require_cvg_key)])
+async def memory_feeder_stats():
+    '''
+    Return status and statistics for the autonomous project feeder.
+    Shows which CVG support engine directories are being monitored and
+    how many file/API/git captures have been fed into memory.
+    '''
+    try:
+        from .project_feeder import get_feeder_stats
+        stats = get_feeder_stats()
+    except Exception:
+        stats = {'running': False, 'error': 'project_feeder not loaded'}
+    return {
+        'feeder':    stats,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post('/api/memory/feeder/scan', dependencies=[Depends(require_cvg_key)])
+async def memory_feeder_scan():
+    '''
+    Trigger an immediate file/API/git scan cycle across all watched project directories.
+    Equivalent to waiting for the next poll cycle, but on-demand.
+    '''
+    import asyncio as _asyncio
+    try:
+        from .project_feeder import get_project_feeder
+        feeder = get_project_feeder()
+
+        def _do_scan():
+            results = {}
+            for ps in feeder._projects:
+                if not ps.exists():
+                    results[ps.name] = {'exists': False}
+                    continue
+                changes = ps.scan_files()
+                api_content = ps.check_api()
+                git_log = ps.check_git()
+                results[ps.name] = {
+                    'exists':       True,
+                    'files_changed': len(changes),
+                    'api_updated':   api_content is not None,
+                    'git_changed':   git_log is not None,
+                }
+            return results
+
+        scan_results = await _asyncio.to_thread(_do_scan)
+        return {
+            'status':  'scanned',
+            'results': scan_results,
+            'stats':   feeder.stats,
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f'Feeder scan failed: {exc}')
+
+
+@app.get('/api/memory/harvester', dependencies=[Depends(require_cvg_key)])
+async def memory_harvester_stats():
+    '''
+    Return status and statistics for the AI history harvester.
+    Shows which local AI tool history directories are being read (Cline, Claude Desktop,
+    Copilot, Aider, LLM CLI) and which remote Hive nodes are being polled via SSH.
+    '''
+    try:
+        from .history_harvester import get_harvester_stats
+        stats = get_harvester_stats()
+    except Exception:
+        stats = {'running': False, 'error': 'history_harvester not loaded'}
+    return {
+        'harvester': stats,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post('/api/memory/harvester/run', dependencies=[Depends(require_cvg_key)])
+async def memory_harvester_run(include_hive: bool = False):
+    '''
+    Trigger an immediate harvest cycle.
+    include_hive=true to also poll all remote Hive nodes via SSH (slower).
+    '''
+    import asyncio as _asyncio
+    try:
+        from .history_harvester import get_harvester
+
+        def _do_harvest():
+            h = get_harvester()
+            local_n = h.harvest_local_once()
+            hive_n  = h.harvest_hive_once() if include_hive else 0
+            return {'local': local_n, 'hive': hive_n, 'total': local_n + hive_n}
+
+        results = await _asyncio.to_thread(_do_harvest)
+        return {
+            'status':      'harvested',
+            'results':     results,
+            'include_hive': include_hive,
+            'timestamp':   datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f'Harvest failed: {exc}')
+
+
+@app.get('/api/memory/preload', dependencies=[Depends(require_cvg_key)])
+async def memory_preload_status():
+    '''
+    Return preload status for all Hive-0 nodes.
+    Shows which nodes have been memory-preloaded and how many items were loaded.
+    '''
+    try:
+        from .hive_preloader import get_preload_status
+        return {
+            'preload':   get_preload_status(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f'Preload status failed: {exc}')
+
+
+@app.post('/api/memory/preload', dependencies=[Depends(require_cvg_key)])
+async def memory_preload_run(force: bool = False, node_ip: Optional[str] = None):
+    '''
+    Trigger a hive memory preload.
+    - force=true: re-preload even nodes already done
+    - node_ip: preload a single node (e.g. ?node_ip=10.10.10.200)
+    - default: preload all pending nodes (skips already-done)
+
+    Runs async in background — returns immediately.
+    '''
+    import asyncio as _asyncio
+    try:
+        from .hive_preloader import preload_all_nodes, preload_node, _ALL_HIVE_NODES
+
+        def _do_preload():
+            if node_ip:
+                if node_ip not in _ALL_HIVE_NODES:
+                    return {'error': f'Unknown node IP: {node_ip}',
+                            'known': list(_ALL_HIVE_NODES.keys())}
+                n = preload_node(node_ip, _ALL_HIVE_NODES[node_ip], force=force)
+                return {node_ip: n, 'total': n}
+            else:
+                results = preload_all_nodes(force=force)
+                return {**results, 'total': sum(results.values())}
+
+        # Run in background thread (non-blocking for the API)
+        import threading as _threading
+        t = _threading.Thread(target=_do_preload, daemon=True)
+        t.start()
+
+        return {
+            'status':    'preload_started',
+            'force':     force,
+            'node_ip':   node_ip or 'all',
+            'message':   'Preload running in background — check /api/memory/preload for status',
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f'Preload failed: {exc}')
+
+
+# ---------------------------------------------------------------------------
+# Forge visibility and control endpoints
+# ---------------------------------------------------------------------------
+
+class ForgeCommandRequest(BaseModel):
+    command:  str = Field(..., min_length=1, max_length=500,
+                          description='Forge command: status, containers, restart <name>, ollama list, exec <cmd>...')
+    target:   Optional[str] = Field(default=None, max_length=50,
+                                     description='Target node: IP, name (vm-451), or role (primary)')
+    node_ip:  Optional[str] = Field(default=None, max_length=20)
+
+
+@app.get('/api/forge/status', dependencies=[Depends(require_cvg_key), Depends(rate_limit)])
+async def forge_status(node: Optional[str] = None, force: bool = False):
+    '''
+    Get real-time status of all Forge/Queen/VM nodes, or a specific node.
+    Collects: containers, memory/CPU/disk, Ollama models, processes, ports.
+
+    ?node=10.10.10.200 or ?node=vm-451 for single node.
+    ?force=true to bypass 60s cache.
+    '''
+    from .forge_manager import get_forge_manager
+    fm = get_forge_manager()
+    if node:
+        status = await fm.get_node_status(node, force=force)
+        if status is None:
+            raise HTTPException(status_code=404, detail=f'Node not found: {node}')
+        return {
+            'node': node,
+            'status': status,
+            'summary': fm.nodes.get(status.get('ip', ''), next(iter(fm.nodes.values()))).format_summary(status),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+        }
+    else:
+        all_status = await fm.get_all_status(force=force)
+        return {
+            'status':    all_status,
+            'summary':   fm.format_forge_summary(all_status),
+            'nodes':     list(all_status.keys()),
+            'reachable': sum(1 for s in all_status.values() if s.get('reachable')),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+        }
+
+
+@app.post('/api/forge/command', dependencies=[Depends(require_cvg_key), Depends(rate_limit)])
+async def forge_command(req: ForgeCommandRequest):
+    '''
+    Execute a forge command on one or all nodes.
+
+    Examples:
+      {"command": "forge status"}
+      {"command": "forge containers", "target": "vm-451"}
+      {"command": "forge restart cvg-neuron-v1", "target": "10.10.10.200"}
+      {"command": "forge ollama list"}
+      {"command": "forge exec df -h", "target": "vm-454"}
+      {"command": "forge compose status"}
+      {"command": "forge logs cvg-neuron-v1"}
+    '''
+    from .forge_manager import get_forge_manager
+    fm = get_forge_manager()
+    target = req.target or req.node_ip
+    result = await fm.dispatch_command(req.command, target=target)
+    return {
+        'command':   req.command,
+        'target':    target or 'auto',
+        'result':    result,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post('/api/forge/docker/{action}', dependencies=[Depends(require_cvg_key), Depends(rate_limit)])
+async def forge_docker(action: str, container: str, node: Optional[str] = None):
+    '''
+    Docker container action on a forge node.
+    action: start | stop | restart | logs | inspect | stats | pull
+    ?container=cvg-neuron-v1  (required for most actions)
+    ?node=vm-451  (optional, defaults to primary)
+    '''
+    valid_actions = {'start', 'stop', 'restart', 'logs', 'inspect', 'stats', 'pull', 'ps'}
+    if action not in valid_actions:
+        raise HTTPException(400, detail=f'Invalid action: {action}. Valid: {valid_actions}')
+
+    from .forge_manager import get_forge_manager
+    fm = get_forge_manager()
+    forge_node = fm._resolve_target(node) if node else fm._primary_forge()
+    if not forge_node:
+        raise HTTPException(404, detail=f'Forge node not found: {node}')
+
+    result = await forge_node.docker_action(action, container)
+    return {
+        'action':    action,
+        'container': container,
+        'node':      forge_node.name,
+        'result':    result,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post('/api/forge/ollama/{action}', dependencies=[Depends(require_cvg_key), Depends(rate_limit)])
+async def forge_ollama(action: str, model: Optional[str] = None,
+                        node: Optional[str] = None):
+    '''
+    Ollama model management on a forge node.
+    action: list | ps | pull | rm | show
+    ?model=cvg-neuron  (required for pull/rm/show)
+    ?node=10.10.10.200  (optional, defaults to Ollama host)
+    '''
+    valid_actions = {'list', 'ps', 'pull', 'rm', 'show', 'run'}
+    if action not in valid_actions:
+        raise HTTPException(400, detail=f'Invalid action: {action}. Valid: {valid_actions}')
+
+    from .forge_manager import get_forge_manager
+    fm = get_forge_manager()
+    forge_node = fm._resolve_target(node) if node else fm._ollama_forge()
+    if not forge_node:
+        raise HTTPException(404, detail='No Ollama forge node found')
+
+    result = await forge_node.ollama_action(action, model or '')
+    return {
+        'action':    action,
+        'model':     model or '',
+        'node':      forge_node.name,
+        'result':    result,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post('/api/forge/exec', dependencies=[Depends(require_cvg_key), Depends(rate_limit)])
+async def forge_exec(command: str, node: Optional[str] = None):
+    '''
+    Execute an arbitrary shell command on a forge node.
+    ?command=df+-h  (the command to run)
+    ?node=vm-451   (optional, defaults to primary)
+
+    WARNING: Full shell access. Requires CVG internal key auth.
+    '''
+    from .forge_manager import get_forge_manager
+    fm = get_forge_manager()
+    forge_node = fm._resolve_target(node) if node else fm._primary_forge()
+    if not forge_node:
+        raise HTTPException(404, detail=f'Forge node not found: {node}')
+
+    logger.warning('[forge/exec] COMMAND on %s by API: %s', forge_node.name, command[:100])
+    result = await forge_node.exec_command(command)
+    return {
+        'node':      forge_node.name,
+        'ip':        forge_node.ip,
+        'command':   command,
+        'result':    result,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get('/api/forge/nodes', dependencies=[Depends(require_cvg_key)])
+async def forge_nodes():
+    '''List all configured forge nodes with their roles and descriptions.'''
+    from .forge_manager import FORGE_NODES, get_forge_manager
+    fm = get_forge_manager()
+    nodes = []
+    for ip, cfg in FORGE_NODES.items():
+        forge = fm.nodes.get(ip)
+        cache = forge._cache if forge else None
+        nodes.append({
+            'ip':         ip,
+            'name':       cfg['name'],
+            'hostname':   cfg['hostname'],
+            'type':       cfg['type'],
+            'role':       cfg['role'],
+            'desc':       cfg['desc'],
+            'has_docker': cfg.get('has_docker', False),
+            'has_ollama': cfg.get('has_ollama', False),
+            'has_proxmox': cfg.get('has_proxmox', False),
+            'last_seen':  cache.get('timestamp') if cache else None,
+            'reachable':  cache.get('reachable') if cache else None,
+        })
+    return {'nodes': nodes, 'count': len(nodes),
+            'timestamp': datetime.now(timezone.utc).isoformat()}
+
+
+# ---------------------------------------------------------------------------
+# DNS visibility and migration endpoints
+# ---------------------------------------------------------------------------
+
+class DnsCommandRequest(BaseModel):
+    command: str = Field(..., min_length=1, max_length=500,
+                         description='DNS command: status, migrate, records, zone, help, or natural language')
+
+
+@app.get('/api/dns/status', dependencies=[Depends(require_cvg_key), Depends(rate_limit)])
+async def dns_status():
+    '''
+    Real-time DNS status for cleargeo.tech.
+    Shows current nameservers, migration state, A/MX records, and DNS Engine health.
+    '''
+    from .dns_manager import get_dns_status, check_subdomain_resolution, dns_health_check
+    status = await get_dns_status()
+    subdomains = await check_subdomain_resolution()
+    health = await dns_health_check()
+    return {
+        'domain':              status.domain,
+        'nameservers':         status.ns_records,
+        'a_record':            status.a_record,
+        'mx_records':          status.mx_records,
+        'migration_complete':  status.migration_complete,
+        'using_hostgator':     status.using_hostgator,
+        'using_selfhosted':    status.using_selfhosted,
+        'dns_engine_online':   status.bind9_engine_online,
+        'subdomains':          subdomains,
+        'health':              health,
+        'playbook':            'docs/DNS_MIGRATION_PLAYBOOK.md',
+        'timestamp':           datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post('/api/dns/command', dependencies=[Depends(require_cvg_key), Depends(rate_limit)])
+async def dns_command(req: DnsCommandRequest):
+    '''
+    Execute a DNS management command.
+
+    Commands:
+      status    — current nameservers, A record, MX, migration state
+      migrate   — migration checklist and remaining steps
+      records   — all zone records (from DNS Engine if online)
+      zone      — BIND9 zone management info
+      help      — full playbook summary and audit commands
+
+    Or ask in natural language:
+      "what DNS nameservers are we using?"
+      "how do I complete the HostGator migration?"
+      "show me all DNS records"
+    '''
+    from .dns_manager import handle_dns_command as _dns_cmd
+    result = await _dns_cmd(req.command)
+    return {
+        'command':   req.command,
+        'result':    result,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get('/api/dns/health', dependencies=[Depends(require_cvg_key)])
+async def dns_health():
+    '''
+    Lightweight DNS health check — nameserver state andd DNS Engine reachability.
+    '''
+    from .dns_manager import dns_health_check
+    result = await dns_health_check()
+    return {**result, 'timestamp': datetime.now(timezone.utc).isoformat()}
+
+
+@app.get('/api/dns/records', dependencies=[Depends(require_cvg_key), Depends(rate_limit)])
+async def dns_records(zone: str = 'cleargeo.tech'):
+    '''
+    Fetch DNS records for a zone from the CVG DNS Engine (port 8810).
+    Returns empty list if DNS Engine is not yet online.
+    '''
+    from .dns_manager import get_zone_records, _engine_health
+    records = await get_zone_records(zone)
+    engine_up = await _engine_health()
+    return {
+        'zone':         zone,
+        'records':      [{'name': r.name, 'type': r.rtype, 'value': r.value, 'ttl': r.ttl}
+                         for r in records],
+        'count':        len(records),
+        'engine_online': engine_up,
+        'engine_url':   'http://10.10.10.200:8810',
+        'timestamp':    datetime.now(timezone.utc).isoformat(),
     }
 
 

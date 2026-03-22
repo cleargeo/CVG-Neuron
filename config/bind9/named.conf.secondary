@@ -1,0 +1,34 @@
+// =============================================================================
+// CVG BIND9 — Secondary Nameserver (ns2.cleargeo.tech)
+// Deploy to: /opt/cvg/bind/config/named.conf on ns2 node
+// (c) Clearview Geographic, LLC — Proprietary
+// =============================================================================
+// BEFORE DEPLOYING: Replace NS1_PUBLIC_IP with actual ns1 public IP
+
+options {
+    directory           "/var/cache/bind";
+    recursion           no;
+    allow-recursion     { none; };
+    listen-on           { any; };
+    listen-on-v6        { any; };
+    dnssec-validation   auto;
+    auth-nxdomain       no;
+    version             "not disclosed";
+};
+
+logging {
+    channel default_log {
+        file "/var/log/named/named.log" versions 3 size 5m;
+        print-time      yes;
+        print-severity  yes;
+        print-category  yes;
+    };
+    category default    { default_log; };
+    category queries    { default_log; };
+};
+
+zone "cleargeo.tech" {
+    type    slave;
+    masters { NS1_PUBLIC_IP; };
+    file    "/var/cache/bind/cleargeo.tech.zone";
+};

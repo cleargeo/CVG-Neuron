@@ -1,0 +1,75 @@
+// =============================================================================
+// CVG BIND9 — Primary Nameserver (ns1.cleargeo.tech)
+// Deploy to: /opt/cvg/bind/config/named.conf on cvg-stormsurge-01
+// Managed by CVG DNS Support Engine (port 8810)
+// (c) Clearview Geographic, LLC — Proprietary
+// =============================================================================
+// BEFORE DEPLOYING: Replace NS2_PUBLIC_IP with actual ns2 public IP
+
+options {
+    directory           "/var/cache/bind";
+    recursion           no;                     // authoritative DNS only — no recursion
+    allow-recursion     { none; };
+    allow-transfer      { NS2_PUBLIC_IP; };     // AXFR to ns2 only
+    also-notify         { NS2_PUBLIC_IP; };
+    notify              yes;
+    listen-on           { any; };
+    listen-on-v6        { any; };
+    dnssec-validation   auto;
+    auth-nxdomain       no;
+    version             "not disclosed";        // hide BIND version
+    querylog            yes;
+};
+
+logging {
+    channel default_log {
+        file "/var/log/named/named.log" versions 3 size 10m;
+        print-time      yes;
+        print-severity  yes;
+        print-category  yes;
+        severity        info;
+    };
+    channel security_log {
+        file "/var/log/named/security.log" versions 3 size 5m;
+        print-time      yes;
+        print-severity  yes;
+        print-category  yes;
+        severity        dynamic;
+    };
+    category default        { default_log; };
+    category queries        { default_log; };
+    category security       { security_log; };
+    category xfer-out       { default_log; };
+};
+
+// Rate limiting — basic DDoS protection
+rate-limit {
+    responses-per-second 15;
+    window 5;
+};
+
+// ACL for internal management access
+acl "cvg-internal" {
+    10.10.10.0/24;
+    127.0.0.0/8;
+};
+
+// =============================================================================
+// Zones
+// =============================================================================
+
+zone "cleargeo.tech" {
+    type    master;
+    file    "/var/lib/bind/cleargeo.tech.zone";
+    allow-transfer  { NS2_PUBLIC_IP; };
+    also-notify     { NS2_PUBLIC_IP; };
+    notify  yes;
+    // Allow CVG Support Engine to manage records:
+    allow-update    { cvg-internal; };
+};
+
+// Optional: reverse zone (if you control the IP block)
+// zone "10.10.10.in-addr.arpa" {
+//     type    master;
+//     file    "/var/lib/bind/10.10.10.zone.rev";
+// };

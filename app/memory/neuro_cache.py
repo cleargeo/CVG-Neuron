@@ -17,7 +17,6 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from threading import RLock
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 from app.core.config import settings
@@ -87,7 +86,8 @@ class NeuroCache:
         self._strategy = strategy.upper()
         self._default_ttl = default_ttl or settings.cache_ttl_seconds
         self._store: OrderedDict[str, CacheEntry] = OrderedDict()
-        self._lock = RLock()
+        # asyncio.Lock — never blocks the event loop unlike threading.RLock
+        self._lock = asyncio.Lock()
 
         # Metrics
         self._hits: int = 0
@@ -109,7 +109,7 @@ class NeuroCache:
         Retrieve a cached value by key.
         Returns None if key doesn't exist or has expired.
         """
-        with self._lock:
+        async with self._lock:
             entry = self._store.get(key)
             if entry is None:
                 self._misses += 1
@@ -159,7 +159,7 @@ class NeuroCache:
             task_id=task_id,
         )
 
-        with self._lock:
+        async with self._lock:
             # If key exists, update in place
             if key in self._store:
                 self._store[key] = entry
@@ -179,7 +179,7 @@ class NeuroCache:
 
     async def delete(self, key: str) -> bool:
         """Remove a specific key. Returns True if key existed."""
-        with self._lock:
+        async with self._lock:
             if key in self._store:
                 del self._store[key]
                 return True
@@ -192,7 +192,7 @@ class NeuroCache:
 
     async def invalidate_by_tag(self, tag: str) -> int:
         """Remove all entries with a given tag. Returns count removed."""
-        with self._lock:
+        async with self._lock:
             to_delete = [k for k, e in self._store.items() if tag in e.tags]
             for key in to_delete:
                 del self._store[key]
@@ -200,7 +200,7 @@ class NeuroCache:
 
     async def invalidate_by_task(self, task_id: str) -> int:
         """Remove all entries created by a specific task."""
-        with self._lock:
+        async with self._lock:
             to_delete = [k for k, e in self._store.items() if e.task_id == task_id]
             for key in to_delete:
                 del self._store[key]
@@ -208,20 +208,20 @@ class NeuroCache:
 
     async def clear(self) -> None:
         """Flush the entire cache."""
-        with self._lock:
+        async with self._lock:
             self._store.clear()
-            log.info("NeuroCache cleared")
+        log.info("NeuroCache cleared")
 
     async def purge_expired(self) -> int:
         """Remove all expired entries. Returns count purged."""
-        with self._lock:
+        async with self._lock:
             expired = [k for k, e in self._store.items() if e.is_expired]
             for key in expired:
                 del self._store[key]
                 self._expirations += 1
-            if expired:
-                log.debug("NeuroCache purged expired entries", count=len(expired))
-            return len(expired)
+        if expired:
+            log.debug("NeuroCache purged expired entries", count=len(expired))
+        return len(expired)
 
     # ── Convenience wrappers ──────────────────────────────────────────────────
 
@@ -294,8 +294,8 @@ class NeuroCache:
         }
 
     def keys(self) -> List[str]:
-        with self._lock:
-            return list(self._store.keys())
+        """Return a snapshot of current cache keys (no lock — safe for GIL-protected read)."""
+        return list(self._store.keys())
 
     # ── Internal eviction ─────────────────────────────────────────────────────
 
