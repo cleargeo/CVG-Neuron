@@ -84,9 +84,6 @@ services:
 volumes:
   neuron-memory:
     driver: local
-    labels:
-      - "cvg.volume=neuron-persistent-memory"
-      - "cvg.description=CVG Neuron memory, identity, training data — DO NOT DELETE"
 
 # =============================================================================
 # Networks
