@@ -1,0 +1,97 @@
+# =============================================================================
+# CVG Neuron — Docker Compose (v1.1.0 — Hive Edition)
+# Artificial Intelligence Engine — Clearview Geographic LLC
+# Port: 8095 | neuron.cleargeo.tech
+#
+# Architecture:
+#   - cvg-neuron:latest   — The AI intelligence (FastAPI + memory + hive manager)
+#   - Uses Ollama on VM-451 (10.10.10.200:11434) as primary LLM backend
+#   - Hive manager probes 10 nodes (Queens + Forges + Compute VMs) for Ollama
+#   - Blockchain tunnel accepts connectors from any CVG application
+#   - cvg-neuron model baked at startup via Modelfile
+#
+# PRIVATE — DO NOT PUSH cvg-neuron model to any public registry
+# =============================================================================
+
+services:
+  cvg-neuron:
+    build:
+      context:    .
+      dockerfile: Dockerfile
+    image:          cvg-neuron:latest
+    container_name: cvg-neuron-v1
+    restart:        unless-stopped
+
+    ports:
+      - "8095:8095"
+
+    environment:
+      # ── LLM Backend ────────────────────────────────────────────────────────
+      # cvg-neuron IS the model — created from Modelfile at container start
+      # Uses VM-451 host Ollama directly (DO NOT use host.docker.internal on Linux)
+      - OLLAMA_URL=http://10.10.10.200:11434
+      - OLLAMA_HOST=http://10.10.10.200:11434
+      - OLLAMA_MODEL=cvg-neuron
+      - OLLAMA_ALT_MODEL=llama3.1:8b
+      - OLLAMA_TIMEOUT=300
+
+      # ── CVG Service Integration ────────────────────────────────────────────
+      - CONTAINERIZATION_ENGINE_URL=${CONTAINERIZATION_ENGINE_URL:-http://cvg-support-engine:8091}
+      - GIT_ENGINE_URL=${GIT_ENGINE_URL:-http://cvg-git-engine:8092}
+      - DNS_ENGINE_URL=${DNS_ENGINE_URL:-http://cvg-dns-engine:8094}
+      - AUDIT_ENGINE_URL=${AUDIT_ENGINE_URL:-http://10.10.10.220:8001}
+      - CVG_INTERNAL_KEY=${CVG_INTERNAL_KEY:-cvg-internal-2026}
+
+      # ── Blockchain Tunnel ──────────────────────────────────────────────────
+      - CVG_TUNNEL_SECRET=${CVG_TUNNEL_SECRET:-cvg-neuron-tunnel-2026}
+
+      # ── Neuron Configuration ───────────────────────────────────────────────
+      - NEURON_DATA_DIR=/app/data
+      - NEURON_MAX_CTX_MSGS=12
+      - NEURON_TIMEOUT=300
+      - NEURON_LOG_LEVEL=INFO
+      - CVG_POLL_TIMEOUT=5
+
+    volumes:
+      # Persistent AI memory: conversations, observations, patterns, identity
+      # This is what makes Neuron smarter over time — never delete this volume
+      - neuron-memory:/app/data
+
+    networks:
+      - cvg_net
+
+    healthcheck:
+      test:         ["CMD", "curl", "-fsS", "http://localhost:8095/health"]
+      interval:     30s
+      timeout:      10s
+      start_period: 90s
+      retries:      3
+
+    labels:
+      - "cvg.service=neuron"
+      - "cvg.version=1.1.0"
+      - "cvg.port=8095"
+      - "cvg.url=https://neuron.cleargeo.tech"
+      - "cvg.description=CVG Neuron — Artificial Intelligence Engine"
+      - "cvg.type=intelligence"
+      - "cvg.hive=true"
+      - "cvg.tunnel=blockchain"
+      - "cvg.private=true"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  neuron-memory:
+    driver: local
+    labels:
+      - "cvg.volume=neuron-persistent-memory"
+      - "cvg.description=CVG Neuron memory, identity, training data — DO NOT DELETE"
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  cvg_net:
+    external: true
+    name:     cvg-platform_cvg_net

@@ -1,0 +1,66 @@
+# CVG Neuron — .gitignore
+# (c) Clearview Geographic LLC — All Rights Reserved
+
+# ── Broken/leftover git dirs from NAS session crashes ────────────────────────
+.git_broken/
+.git_disabled/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Secrets / environment ─────────────────────────────────────────────────────
+.env
+*.env
+*.env.*
+!*.env.example
+
+# ── Logs / data ───────────────────────────────────────────────────────────────
+*.log
+data/
+config/neuron_config.yml
+!config/neuron_config.yml.example
+
+# ── OS artifacts ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── Large binary files ────────────────────────────────────────────────────────
+*.zip
+*.war
+*.jar
+*.gz
+*.tar
+*.tar.gz
+*.tgz
+
+# ── Temp / dev / test scripts (generated during development sessions) ─────────
+write_all.py
+write_files.py
+write_all.ps1
+write_entra.py
+write_forge.ps1
+write_rw_tests.py
+write_test.py
+write_tomls.ps1
+ollama_client_patch.py
+neuron/test123.py
+neuron/test_ps.py
+neuron/test_write.py
+neuron/verify_write.py

@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CVG Neuron — Artificial Intelligence</title>
+  <style>
+    /* ── Reset ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #060b18;
+      --bg-card:  #0d1525;
+      --bg-panel: #111b30;
+      --bg-deep:  #080e1e;
+      --border:   #1e3a5f;
+      --border-hi:#2563eb;
+      --text:     #e2e8f0;
+      --text-sec: #94a3b8;
+      --text-dim: #475569;
+      --blue:     #3b82f6;
+      --blue-hi:  #60a5fa;
+      --green:    #22c55e;
+      --yellow:   #eab308;
+      --red:      #ef4444;
+      --purple:   #a855f7;
+      --cyan:     #06b6d4;
+      --orange:   #f97316;
+      --mono:     'Courier New', monospace;
+      --sans:     -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
+    button { cursor: pointer; border: none; outline: none; font-family: inherit; }
+    a { color: var(--blue-hi); text-decoration: none; }
+
+    /* ── Layout ─────────────────────────────────────── */
+    .shell { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+    .header { background: var(--bg-card); border-bottom: 1px solid var(--border); padding: 0 20px;
+              display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-name { color: var(--blue-hi); font-size: 1.2rem; font-weight: 700; }
+    .brand-ver { background: #1e3a5f; color: var(--blue-hi); padding: 2px 8px; border-radius: 999px;
+                 font-size: 0.68rem; font-family: var(--mono); }
+    .brand-badge { background: #0f2a4a; border: 1px solid #2563eb33; color: var(--blue-hi);
+                   padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; letter-spacing: .04em; }
+    .hdr-right { display: flex; align-items: center; gap: 14px; font-size: 0.75rem; color: var(--text-sec); }
+    .hdr-stat { display: flex; align-items: center; gap: 5px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .dot-g { background: var(--green); box-shadow: 0 0 5px var(--green); }
+    .dot-y { background: var(--yellow); box-shadow: 0 0 5px var(--yellow); }
+    .dot-r { background: var(--red); box-shadow: 0 0 5px var(--red); }
+    .dot-d { background: var(--text-dim); }
+
+    /* ── Main grid ──────────────────────────────────── */
+    .body { display: grid; grid-template-columns: 220px 1fr; overflow: hidden; }
+    .sidebar { background: var(--bg-card); border-right: 1px solid var(--border); overflow-y: auto;
+               padding: 16px 12px; display: flex; flex-direction: column; gap: 20px; }
+    .s-sec-label { font-size: .62rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+                   color: var(--text-dim); padding-left: 6px; margin-bottom: 4px; }
+    .s-item { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 6px;
+              cursor: pointer; color: var(--text-sec); font-size: .82rem; transition: all .15s;
+              border: 1px solid transparent; }
+    .s-item:hover { background: var(--bg-panel); color: var(--text); border-color: var(--border); }
+    .s-item.active { background: #1e3a5f; color: var(--blue-hi); border-color: var(--border-hi); }
+
+    /* Identity card in sidebar */
+    .id-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+               padding: 12px; }
+    .id-name { font-size: .82rem; font-weight: 700; color: var(--blue-hi); }
+    .id-codename { font-size: .65rem; color: var(--purple); font-family: var(--mono); margin-top: 2px; }
+    .cap-bar-wrap { margin-top: 10px; }
+    .cap-label { display: flex; justify-content: space-between; font-size: .65rem; color: var(--text-dim);
+                 margin-bottom: 4px; }
+    .cap-bar { height: 5px; background: var(--bg-deep); border-radius: 999px; overflow: hidden; }
+    .cap-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--purple));
+                border-radius: 999px; transition: width .6s ease; }
+    .evo-stage { font-size: .65rem; color: var(--text-sec); margin-top: 6px; }
+
+    /* ── Content area ───────────────────────────────── */
+    .content { display: flex; flex-direction: column; overflow: hidden; }
+    .tabbar { background: var(--bg-card); border-bottom: 1px solid var(--border);
+              display: flex; padding: 0 20px; overflow-x: auto; flex-shrink: 0; }
+    .tab { padding: 14px 16px; font-size: .8rem; color: var(--text-dim); cursor: pointer;
+           border-bottom: 2px solid transparent; white-space: nowrap; transition: all .15s; }
+    .tab:hover { color: var(--text-sec); }
+    .tab.active { color: var(--blue-hi); border-bottom-color: var(--blue); }
+    .pages { flex: 1; overflow-y: auto; }
+    .page { display: none; padding: 20px; }
+    .page.active { display: block; }
+
+    /* ── Utility ─────────────────────────────────────── */
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 18px; margin-bottom: 16px; }
+    .card-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+    .card-title { font-size: .85rem; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+    .card-sub { font-size: .7rem; color: var(--text-dim); margin-top: 2px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .stat { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+    .stat-v { font-size: 1.5rem; font-weight: 700; font-family: var(--mono); }
+    .stat-l { font-size: .65rem; color: var(--text-dim); text-transform: uppercase; margin-top: 4px; letter-spacing: .05em; }
+    .stat-s { font-size: .7rem; color: var(--text-sec); margin-top: 4px; }
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0;
+           border-bottom: 1px solid var(--border); font-size: .8rem; }
+    .row:last-child { border-bottom: none; }
+    .row .lbl { color: var(--text-sec); }
+    .row .val { font-family: var(--mono); color: var(--text); font-size: .78rem; }
+    .badge { padding: 2px 8px; border-radius: 999px; font-size: .65rem; font-family: var(--mono); }
+    .b-ok  { background: #14532d; color: #4ade80; }
+    .b-warn { background: #422006; color: #fb923c; }
+    .b-err { background: #450a0a; color: #f87171; }
+    .b-dim { background: #1c1c27; color: #71717a; }
+    .b-blue { background: #1e3a5f; color: var(--blue-hi); border: 1px solid #2563eb44; }
+    .b-purple { background: #2e1065; color: #c084fc; }
+    .btn { border-radius: 6px; padding: 6px 14px; font-size: .78rem; font-weight: 600;
+           transition: all .15s; cursor: pointer; }
+    .btn-blue { background: var(--blue); color: #fff; }
+    .btn-blue:hover { background: var(--blue-hi); }
+    .btn-ghost { background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-sec); }
+    .btn-ghost:hover { border-color: var(--blue); color: var(--text); }
+    .btn-sm { padding: 4px 10px; font-size: .72rem; }
+    .mt8  { margin-top: 8px; }
+    .mt16 { margin-top: 16px; }
+    .c-g { color: var(--green); }
+    .c-r { color: var(--red); }
+    .c-y { color: var(--yellow); }
+    .c-b { color: var(--blue-hi); }
+    .c-p { color: var(--purple); }
+    .c-c { color: var(--cyan); }
+    .c-d { color: var(--text-dim); }
+    .mono { font-family: var(--mono); }
+
+    /* ── Hive topology ───────────────────────────────── */
+    .hive-node { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+                 padding: 12px 14px; margin-bottom: 8px; cursor: default; }
+    .hive-node.no-ollama { opacity: .6; }
+    .hive-node.has-ollama { border-color: #2563eb55; }
+    .hn-header { display: flex; justify-content: space-between; align-items: center; }
+    .hn-id { font-size: .82rem; font-weight: 600; font-family: var(--mono); }
+    .hn-badges { display: flex; gap: 5px; }
+    .hn-desc { font-size: .7rem; color: var(--text-dim); margin-top: 4px; }
+    .hn-models { font-size: .68rem; color: var(--cyan); margin-top: 5px; font-family: var(--mono); }
+    .hn-latency { font-size: .68rem; color: var(--text-sec); margin-top: 3px; }
+
+    /* ── Tunnel chain ────────────────────────────────── */
+    .block-item { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px;
+                  padding: 9px 12px; margin-bottom: 6px; font-size: .76rem; }
+    .blk-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .blk-type { font-family: var(--mono); font-weight: 600; }
+    .blk-meta { color: var(--text-dim); font-size: .68rem; }
+    .blk-hash { font-family: var(--mono); font-size: .65rem; color: var(--text-dim); }
+
+    /* ── Chat ────────────────────────────────────────── */
+    .chat-wrap { display: flex; flex-direction: column; height: calc(100vh - 140px); }
+    .chat-msgs { flex: 1; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 10px; }
+    .msg { display: flex; gap: 8px; max-width: 88%; }
+    .msg.user { flex-direction: row-reverse; align-self: flex-end; }
+    .msg-av { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center;
+              justify-content: center; font-size: .7rem; flex-shrink: 0; margin-top: 2px; font-weight: 700; }
+    .msg.assistant .msg-av { background: #1e3a5f; color: var(--blue-hi); }
+    .msg.user .msg-av { background: #2e1065; color: var(--purple); }
+    .bubble { padding: 9px 13px; border-radius: 10px; font-size: .82rem; line-height: 1.55; white-space: pre-wrap; }
+    .msg.assistant .bubble { background: var(--bg-panel); border: 1px solid var(--border);
+                              border-radius: 2px 10px 10px 10px; }
+    .msg.user .bubble { background: #1e3a5f; border: 1px solid #2563eb44;
+                        border-radius: 10px 2px 10px 10px; }
+    .chat-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px;
+                      background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+                      padding: 10px 14px; }
+    .chat-input { flex: 1; background: transparent; border: none; color: var(--text); font-size: .84rem;
+                  font-family: inherit; resize: none; outline: none; min-height: 34px; max-height: 100px;
+                  line-height: 1.5; }
+    .chat-input::placeholder { color: var(--text-dim); }
+    .btn-send { background: var(--blue); color: #fff; border-radius: 6px; padding: 7px 16px;
+                font-size: .78rem; font-weight: 600; flex-shrink: 0; transition: background .15s; }
+    .btn-send:hover { background: var(--blue-hi); }
+    .btn-send:disabled { background: var(--text-dim); cursor: not-allowed; }
+
+    /* ── Analysis ──────────────────────────────────── */
+    .ana-btn { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+               padding: 12px 16px; display: flex; align-items: center; gap: 10px; cursor: pointer;
+               width: 100%; margin-bottom: 8px; transition: all .15s; }
+    .ana-btn:hover { border-color: var(--blue); }
+    .ana-btn.running { border-color: var(--blue); animation: pulse .8s ease-in-out infinite alternate; }
+    @keyframes pulse { from { border-color: #2563eb; } to { border-color: var(--blue-hi); } }
+    .ana-icon { font-size: 1.2rem; }
+    .ana-title { font-size: .84rem; font-weight: 600; }
+    .ana-desc { font-size: .7rem; color: var(--text-dim); margin-top: 2px; }
+    .result-box { background: var(--bg-deep); border: 1px solid var(--border); border-radius: 8px;
+                  padding: 14px; min-height: 140px; font-family: var(--mono); font-size: .76rem;
+                  line-height: 1.6; color: var(--text-sec); white-space: pre-wrap; word-break: break-word; }
+
+    /* ── Roadmap ─────────────────────────────────────── */
+    .roadmap-item { display: flex; gap: 14px; margin-bottom: 16px; padding-bottom: 16px;
+                    border-bottom: 1px solid var(--border); }
+    .roadmap-item:last-child { border-bottom: none; margin-bottom: 0; }
+    .rm-ver { width: 50px; flex-shrink: 0; }
+    .rm-v { font-family: var(--mono); font-size: .9rem; font-weight: 700; color: var(--blue-hi); }
+    .rm-s { font-size: .65rem; margin-top: 3px; }
+    .rm-label { font-size: .84rem; font-weight: 600; margin-bottom: 5px; }
+    .rm-desc { font-size: .76rem; color: var(--text-sec); line-height: 1.5; }
+
+    /* ── Spinner ─────────────────────────────────────── */
+    .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border);
+            border-top-color: var(--blue); border-radius: 50%; animation: rot .7s linear infinite;
+            vertical-align: middle; margin-right: 5px; }
+    @keyframes rot { to { transform: rotate(360deg); } }
+
+    /* ── Type-badge colors for block types ────────────── */
+    .bt-genesis { color: var(--purple); }
+    .bt-register { color: var(--green); }
+    .bt-heartbeat { color: var(--text-dim); }
+    .bt-context_push { color: var(--cyan); }
+    .bt-inference_request { color: var(--yellow); }
+    .bt-inference_response { color: var(--blue-hi); }
+    .bt-deploy_event { color: var(--orange); }
+    .bt-audit_event { color: var(--red); }
+    .bt-alert { color: var(--red); }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ── Header ────────────────────────────────────────────── -->
+<header class="header">
+  <div class="brand">
+    <span class="brand-name">⚡ CVG Neuron</span>
+    <span class="brand-ver">v1.0.0</span>
+    <span class="brand-badge">HIVE INTELLIGENCE</span>
+    <span class="brand-badge" style="color:var(--purple);border-color:#7c3aed33;background:#2e1065;">PRIVATE</span>
+  </div>
+  <div class="hdr-right">
+    <div class="hdr-stat">
+      <span class="dot dot-d" id="h-ollama-dot"></span>
+      <span id="h-ollama">Ollama: —</span>
+    </div>
+    <div class="hdr-stat">
+      <span class="dot dot-d" id="h-hive-dot"></span>
+      <span id="h-hive">Hive: —</span>
+    </div>
+    <div class="hdr-stat">
+      <span class="dot dot-d" id="h-tunnel-dot"></span>
+      <span id="h-tunnel">Chain: —</span>
+    </div>
+    <span class="c-d mono" id="h-clock">—</span>
+  </div>
+</header>
+
+<div class="body">
+
+<!-- ── Sidebar ───────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div>
+    <div class="s-sec-label">Navigation</div>
+    <div class="s-item active" onclick="nav('dashboard',this)">📊 Dashboard</div>
+    <div class="s-item" onclick="nav('hive',this)">🐝 Hive Cluster</div>
+    <div class="s-item" onclick="nav('tunnel',this)">🔗 Blockchain Tunnel</div>
+    <div class="s-item" onclick="nav('identity',this)">🧬 Neuron Identity</div>
+    <div class="s-item" onclick="nav('chat',this)">💬 AI Chat</div>
+    <div class="s-item" onclick="nav('analyze',this)">🧠 Analyze</div>
+    <div class="s-item" onclick="nav('memory',this)">🗄️ Memory</div>
+    <div class="s-item" onclick="nav('infra',this)">⚙️ Infrastructure</div>
+  </div>
+
+  <div>
+    <div class="s-sec-label">CVG Neuron</div>
+    <div class="id-card">
+      <div class="id-name">CVG Neuron</div>
+      <div class="id-codename">STORMSURGE-MIND</div>
+      <div class="cap-bar-wrap">
+        <div class="cap-label">
+          <span>Capability</span>
+          <span id="sb-cap-val" class="c-b">0.0</span>
+        </div>
+        <div class="cap-bar"><div class="cap-fill" id="sb-cap-bar" style="width:0%"></div></div>
+      </div>
+      <div class="evo-stage" id="sb-evo">v1.0 nascent</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="s-sec-label">Quick Links</div>
+    <div class="s-item" onclick="window.open('/api/docs','_blank')">📄 API Docs</div>
+    <div class="s-item" onclick="window.open('/api/context','_blank')">🌐 Full Context</div>
+    <div class="s-item" onclick="window.open('/api/identity','_blank')">🔍 Identity JSON</div>
+  </div>
+</aside>
+
+<!-- ── Content ────────────────────────────────────────────── -->
+<div class="content">
+  <div class="tabbar">
+    <div class="tab active" data-page="dashboard" onclick="tabClick(this)">Dashboard</div>
+    <div class="tab" data-page="hive" onclick="tabClick(this)">Hive Cluster</div>
+    <div class="tab" data-page="tunnel" onclick="tabClick(this)">Blockchain Tunnel</div>
+    <div class="tab" data-page="identity" onclick="tabClick(this)">Identity</div>
+    <div class="tab" data-page="chat" onclick="tabClick(this)">AI Chat</div>
+    <div class="tab" data-page="analyze" onclick="tabClick(this)">Analyze</div>
+    <div class="tab" data-page="memory" onclick="tabClick(this)">Memory</div>
+    <div class="tab" data-page="infra" onclick="tabClick(this)">Infrastructure</div>
+  </div>
+
+  <div class="pages">
+
+    <!-- ── Dashboard ─────────────────────────────────── -->
+    <div class="page active" id="page-dashboard">
+      <div class="grid4 mt8">
+        <div class="stat">
+          <div class="stat-v c-b" id="d-model">—</div>
+          <div class="stat-l">Active Model</div>
+          <div class="stat-s">identity model</div>
+        </div>
+        <div class="stat">
+          <div class="stat-v" id="d-hive-nodes">—</div>
+          <div class="stat-l">Hive Nodes</div>
+          <div class="stat-s" id="d-hive-ollama">— with Ollama</div>
+        </div>
+        <div class="stat">
+          <div class="stat-v c-p" id="d-chain-len">—</div>
+          <div class="stat-l">Chain Length</div>
+          <div class="stat-s">blockchain blocks</div>
+        </div>
+        <div class="stat">
+          <div class="stat-v c-c" id="d-inferences">—</div>
+          <div class="stat-l">Inferences</div>
+          <div class="stat-s">accumulated</div>
+        </div>
+      </div>
+
+      <div class="grid2 mt16">
+        <div class="card">
+          <div class="card-hdr">
+            <div>
+              <div class="card-title">🐝 Hive Cluster</div>
+              <div class="card-sub">Node registration & Ollama availability</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadHiveSummary()">↻ Probe</button>
+          </div>
+          <div id="d-hive-list"><div class="c-d" style="font-size:.78rem">Loading hive...</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-hdr">
+            <div>
+              <div class="card-title">🔗 Blockchain Tunnel</div>
+              <div class="card-sub">Signed message chain integrity</div>
+            </div>
+          </div>
+          <div id="d-tunnel-info"><div class="c-d" style="font-size:.78rem">Loading tunnel...</div></div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">🧬 NeuronCore Identity</div>
+          </div>
+          <div id="d-identity-panel"><div class="c-d" style="font-size:.78rem">Loading...</div></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">🤖 Ollama Status</div>
+          </div>
+          <div id="d-model-panel"><div class="c-d" style="font-size:.78rem">Loading...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Hive Cluster ────────────────────────────────── -->
+    <div class="page" id="page-hive">
+      <div class="card">
+        <div class="card-hdr">
+          <div>
+            <div class="card-title">🐝 Hive-0 Cluster Topology</div>
+            <div class="card-sub">Queens · Forges · Compute VMs · Edge Nodes — all probed for Ollama availability</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="loadHive()">↻ Refresh</button>
+            <button class="btn btn-blue btn-sm" onclick="probeHive()">⚡ Force Probe</button>
+          </div>
+        </div>
+        <div class="grid4" style="margin-bottom:14px;" id="hive-stats">
+          <div class="stat"><div class="stat-v c-b" id="h-total">—</div><div class="stat-l">Total Nodes</div></div>
+          <div class="stat"><div class="stat-v c-g" id="h-online">—</div><div class="stat-l">Online</div></div>
+          <div class="stat"><div class="stat-v c-p" id="h-ollama">—</div><div class="stat-l">With Ollama</div></div>
+          <div class="stat"><div class="stat-v c-c" id="h-models-count">—</div><div class="stat-l">Available Models</div></div>
+        </div>
+        <div id="hive-nodes-list"><div class="c-d">Loading hive topology...</div></div>
+      </div>
+    </div>
+
+    <!-- ── Blockchain Tunnel ──────────────────────────── -->
+    <div class="page" id="page-tunnel">
+      <div class="grid2">
+        <div>
+          <div class="card">
+            <div class="card-hdr">
+              <div>
+                <div class="card-title">🔗 Chain Status</div>
+                <div class="card-sub">HMAC-SHA256 signed block chain</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="loadTunnel()">↻ Refresh</button>
+            </div>
+            <div id="tunnel-chain-info"><div class="c-d">Loading...</div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">🔌 Connectors</div>
+            </div>
+            <div id="tunnel-connectors"><div class="c-d" style="font-size:.78rem">No connectors registered yet.</div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">🔑 Get Connector Token</div>
+              <div class="card-sub">Generate auth token for a new connector</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="token-connector-id" placeholder="connector-id" style="flex:1;background:var(--bg-panel);
+                border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;
+                font-size:.78rem;font-family:var(--mono);outline:none;" />
+              <button class="btn btn-blue btn-sm" onclick="getToken()">Generate</button>
+            </div>
+            <div id="token-result" class="mono c-g mt8" style="font-size:.7rem;word-break:break-all;"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">📦 Recent Blocks</div>
+              <div class="card-sub">Last 15 blocks in the chain</div>
+            </div>
+            <div id="tunnel-blocks"><div class="c-d">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Identity ───────────────────────────────────── -->
+    <div class="page" id="page-identity">
+      <div class="grid2">
+        <div>
+          <div class="card">
+            <div class="card-hdr">
+              <div>
+                <div class="card-title">🧬 NeuronCore Identity</div>
+                <div class="card-sub">CVG Neuron self-model & capability tracking</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="loadIdentity()">↻ Refresh</button>
+            </div>
+            <div id="id-core-panel"><div class="c-d">Loading identity...</div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">📈 Training Readiness</div>
+              <div class="card-sub">Progress toward fine-tuning (v2.0)</div>
+            </div>
+            <div id="id-training-panel"><div class="c-d">Loading...</div></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">🗺️ Evolution Roadmap</div>
+              <div class="card-sub">CVG Neuron v1.0 → v3.0: from Ollama wrapper to independent AI</div>
+            </div>
+            <div id="id-roadmap"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">⚙️ Model Operations</div>
+            </div>
+            <button class="btn btn-blue btn-sm" style="margin-bottom:8px;width:100%"
+                    onclick="genModelfile()">Generate Evolved Modelfile</button>
+            <button class="btn btn-ghost btn-sm" style="width:100%"
+                    onclick="window.open('/api/identity/export','_blank')">Export Training Data</button>
+            <div id="modelfile-result" class="c-g mono mt8" style="font-size:.7rem;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Chat ──────────────────────────────────────── -->
+    <div class="page" id="page-chat">
+      <div class="chat-wrap">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="font-size:.82rem;color:var(--text-sec);">CVG Neuron — hive-routed AI inference</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <label style="font-size:.7rem;color:var(--text-dim);">Live context:</label>
+            <input type="checkbox" id="chat-live-ctx" style="margin-right:8px;" />
+            <button class="btn btn-ghost btn-sm" onclick="clearChat()">Clear</button>
+          </div>
+        </div>
+        <div class="chat-msgs" id="chat-msgs">
+          <div class="msg assistant">
+            <div class="msg-av">N</div>
+            <div class="bubble">Hello. I'm CVG Neuron — the artificial intelligence of Clearview Geographic LLC.<br><br>I have deep knowledge of your Hive-0 infrastructure, all CVG services (ports, IPs, configs), 290+ GIS projects, security posture, and the entire deployment stack. I'm backed by the <strong>cvg-neuron</strong> Ollama model with my identity baked in, and my inference is routed across all available Hive-0 nodes.<br><br>What would you like to know?</div>
+          </div>
+        </div>
+        <div class="chat-input-row">
+          <textarea class="chat-input" id="chat-in" placeholder="Ask about infrastructure, Docker, GIS, DNS, security, deployments..." rows="1"
+                    onkeydown="chatKey(event)" oninput="autoH(this)"></textarea>
+          <button class="btn-send" id="btn-send" onclick="sendChat()">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Analyze ───────────────────────────────────── -->
+    <div class="page" id="page-analyze">
+      <div class="grid2">
+        <div>
+          <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;
+                      padding:9px 12px;margin-bottom:14px;font-size:.78rem;color:#93c5fd;">
+            ⚡ Select an analysis mode. Neuron will pull live context from CVG engines and
+            run AI inference via the Hive cluster.
+          </div>
+
+          <button class="ana-btn" id="abtn-infrastructure" onclick="runAnalysis('infrastructure')">
+            <span class="ana-icon">🐳</span>
+            <div><div class="ana-title">Infrastructure Analysis</div>
+              <div class="ana-desc">Container health, node telemetry — vm-451, vm-454, vm-455, CT-104</div></div>
+          </button>
+          <button class="ana-btn" id="abtn-security" onclick="runAnalysis('security')">
+            <span class="ana-icon">🛡️</span>
+            <div><div class="ana-title">Security Posture</div>
+              <div class="ana-desc">Wazuh alerts, Trivy CVEs, known open items — Audit VM 10.10.10.220</div></div>
+          </button>
+          <button class="ana-btn" id="abtn-full" onclick="runAnalysisMode('deployment')">
+            <span class="ana-icon">🚀</span>
+            <div><div class="ana-title">Deployment Analysis</div>
+              <div class="ana-desc">Analyze a specific service deployment for issues</div></div>
+          </button>
+          <button class="ana-btn" id="abtn-report" onclick="runReport()">
+            <span class="ana-icon">📋</span>
+            <div><div class="ana-title">Daily Intelligence Report</div>
+              <div class="ana-desc">Full CVG platform status — memory + observations + events</div></div>
+          </button>
+
+          <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+            <div style="font-size:.72rem;color:var(--text-dim);margin-bottom:8px;">Deployment analysis service name:</div>
+            <input id="deploy-service" placeholder="e.g. cvg-neuron" style="width:100%;background:var(--bg-panel);
+              border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;
+              font-size:.78rem;font-family:var(--mono);outline:none;margin-bottom:6px;" />
+            <input id="deploy-version" placeholder="version (e.g. 1.0.0)" style="width:100%;background:var(--bg-panel);
+              border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;
+              font-size:.78rem;font-family:var(--mono);outline:none;" />
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span id="ana-label" style="font-size:.82rem;font-weight:600;color:var(--text-sec);">Analysis Result</span>
+            <button id="ana-copy" onclick="copyResult()" style="display:none;" class="btn btn-ghost btn-sm">Copy</button>
+          </div>
+          <div class="result-box" id="ana-result">Select an analysis type to begin.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Memory ─────────────────────────────────────── -->
+    <div class="page" id="page-memory">
+      <div class="grid2">
+        <div>
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">🗄️ Memory Stats</div>
+              <button class="btn btn-ghost btn-sm" onclick="loadMemory()">↻ Refresh</button>
+            </div>
+            <div id="mem-stats"><div class="c-d">Loading...</div></div>
+          </div>
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">⚠️ Active Warnings</div>
+            </div>
+            <div id="mem-warnings"><div class="c-d" style="font-size:.78rem">No warnings.</div></div>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">🔄 Top Patterns</div>
+            </div>
+            <div id="mem-patterns"><div class="c-d" style="font-size:.78rem">No patterns yet.</div></div>
+          </div>
+          <div class="card">
+            <div class="card-hdr">
+              <div class="card-title">📅 Recent Events</div>
+            </div>
+            <div id="mem-events"><div class="c-d" style="font-size:.78rem">No events.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Infrastructure ────────────────────────────── -->
+    <div class="page" id="page-infra">
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title">⚙️ CVG Service Health</div>
+          <button class="btn btn-ghost btn-sm" onclick="loadInfra()">↻ Refresh</button>
+        </div>
+        <div id="infra-health"><div class="c-d">Loading...</div></div>
+      </div>
+    </div>
+
+  </div><!-- /.pages -->
+</div><!-- /.content -->
+</div><!-- /.body -->
+</div><!-- /.shell -->
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let chatHistory = [], analysisCount = 0, _identityData = {}, _hiveData = {};
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  setInterval(loadAll, 60000);
+  setInterval(() => {
+    const el = document.getElementById('h-clock');
+    if (el) el.textContent = new Date().toLocaleTimeString('en-US', {hour12: false});
+  }, 1000);
+});
+
+async function loadAll() {
+  await Promise.allSettled([loadContext(), loadIdentity(), loadHive(), loadTunnel()]);
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+function nav(page, el) {
+  document.querySelectorAll('.s-item').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  showPage(page);
+}
+
+function tabClick(el) {
+  const page = el.dataset.page;
+  document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.s-item').forEach(e => {
+    if (e.getAttribute('onclick') && e.getAttribute('onclick').includes(`'${page}'`)) e.classList.add('active');
+    else e.classList.remove('active');
+  });
+  showPage(page);
+}
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(e => e.classList.remove('active'));
+  const p = document.getElementById('page-' + name);
+  if (p) p.classList.add('active');
+  // Lazy-load page data
+  if (name === 'memory') loadMemory();
+  if (name === 'infra') loadInfra();
+  if (name === 'hive') loadHive();
+  if (name === 'tunnel') loadTunnel();
+  if (name === 'identity') loadIdentity();
+}
+
+// ── Context (header status) ────────────────────────────────────────────────
+async function loadContext() {
+  try {
+    const d = await api('/api/context');
+
+    // Header dots
+    const ollamaOk = d.model?.available;
+    dot('h-ollama-dot', ollamaOk ? 'g' : 'r');
+    set('h-ollama', 'Ollama: ' + (ollamaOk ? 'online' : 'offline'));
+
+    const hiveOnline = d.hive?.ollama_nodes || 0;
+    dot('h-hive-dot', hiveOnline > 0 ? 'g' : (d.hive?.online_nodes > 0 ? 'y' : 'd'));
+    set('h-hive', `Hive: ${d.hive?.online_nodes||0}/${d.hive?.total_nodes||0} nodes`);
+
+    const chainOk = d.tunnel?.chain_valid;
+    dot('h-tunnel-dot', chainOk ? 'g' : 'r');
+    set('h-tunnel', `Chain: ${d.tunnel?.chain_length||0} blocks`);
+
+    // Dashboard stats
+    set('d-model', d.model?.active_model||d.model?.models?.[0]||'cvg-neuron');
+    const hn = d.hive?.online_nodes||0;
+    setHtml('d-hive-nodes', `<span class="${hn>0?'c-g':'c-r'}">${hn}</span>/${d.hive?.total_nodes||0}`);
+    set('d-hive-ollama', `${d.hive?.ollama_nodes||0} with Ollama`);
+    set('d-chain-len', d.tunnel?.chain_length||0);
+    set('d-inferences', d.identity_snapshot?.total_inferences||0);
+
+    // Dashboard panels
+    renderIdentityPanel(d);
+    renderModelPanel(d.model);
+    renderTunnelDashPanel(d.tunnel);
+  } catch(e) { console.warn('context load failed:', e); }
+}
+
+// ── Identity ───────────────────────────────────────────────────────────────
+async function loadIdentity() {
+  try {
+    const d = await api('/api/identity');
+    _identityData = d;
+    const rt = d.runtime || {};
+    const ev = d.evolution || {};
+    const cap = ev.capability_score || 0;
+
+    // Sidebar
+    set('sb-cap-val', cap.toFixed(1));
+    document.getElementById('sb-cap-bar').style.width = Math.min(100, cap) + '%';
+    set('sb-evo', ev.stage || 'v1.0 nascent');
+
+    // Identity page — core
+    const mem = d.memory || {};
+    setHtml('id-core-panel', `
+      <div class="row"><span class="lbl">Name</span><span class="val c-b">CVG Neuron</span></div>
+      <div class="row"><span class="lbl">Codename</span><span class="val c-p">STORMSURGE-MIND</span></div>
+      <div class="row"><span class="lbl">Is Model Hub</span><span class="val c-r">No</span></div>
+      <div class="row"><span class="lbl">Is Wrapper</span><span class="val c-r">No</span></div>
+      <div class="row"><span class="lbl">Is Intelligence</span><span class="val c-g">Yes</span></div>
+      <div class="row"><span class="lbl">Public Registry</span><span class="val c-r">PRIVATE — not published</span></div>
+      <div class="row"><span class="lbl">Capability Score</span><span class="val c-b">${cap.toFixed(2)} / 100</span></div>
+      <div class="row"><span class="lbl">Evolution Stage</span><span class="val c-g">${ev.stage||'—'}</span></div>
+      <div class="row"><span class="lbl">Total Inferences</span><span class="val c-c">${rt.total_inferences||0}</span></div>
+      <div class="row"><span class="lbl">Total Conversations</span><span class="val">${rt.total_conversations||0}</span></div>
+      <div class="row"><span class="lbl">Training Examples</span><span class="val c-y">${rt.training_examples||0}</span></div>
+      <div class="row"><span class="lbl">Memory DB</span><span class="val">${mem.conversations||0} msgs · ${mem.patterns||0} patterns</span></div>
+    `);
+
+    // Training readiness
+    const tr = ev.training_readiness || {};
+    const rp = tr.readiness_pct || 0;
+    setHtml('id-training-panel', `
+      <div class="cap-bar-wrap" style="margin-bottom:12px;">
+        <div class="cap-label"><span>Fine-Tune Readiness</span><span class="c-b">${rp.toFixed(1)}%</span></div>
+        <div class="cap-bar"><div class="cap-fill" style="width:${rp}%;background:linear-gradient(90deg,var(--yellow),var(--orange))"></div></div>
+      </div>
+      <div class="row"><span class="lbl">Conversations</span><span class="val">${tr.conversations||0} / ${tr.min_for_finetune?.conversations||500}</span></div>
+      <div class="row"><span class="lbl">Training Examples</span><span class="val">${tr.training_examples||0} / ${tr.min_for_finetune?.examples||1000}</span></div>
+      <div class="row"><span class="lbl">Patterns Learned</span><span class="val">${tr.patterns_learned||0} / ${tr.min_for_finetune?.patterns||100}</span></div>
+      <div class="row" style="border:none"><span class="lbl">Recommendation</span>
+        <span class="val ${rp>=80?'c-g':'c-y'}">${tr.recommendation||'—'}</span></div>
+    `);
+
+    // Roadmap
+    const roadmap = d.roadmap || [];
+    setHtml('id-roadmap', roadmap.map(r => `
+      <div class="roadmap-item">
+        <div class="rm-ver">
+          <div class="rm-v">v${r.version}</div>
+          <div class="rm-s ${r.status==='ACTIVE'?'c-g':r.status==='PLANNED'?'c-y':'c-d'}">${r.status}</div>
+        </div>
+        <div>
+          <div class="rm-label">${r.label}</div>
+          <div class="rm-desc">${r.description}</div>
+        </div>
+      </div>`).join(''));
+
+    // Dashboard identity panel
+    renderIdentityPanel({identity_snapshot: {
+      total_inferences: rt.total_inferences||0,
+      total_conversations: rt.total_conversations||0,
+      training_examples: rt.training_examples||0,
+    }, evolution: ev});
+
+  } catch(e) { console.warn('identity load failed:', e); }
+}
+
+function renderIdentityPanel(d) {
+  const snap = d.identity_snapshot || {};
+  const ev   = d.evolution || {};
+  const cap  = ev.capability_score || 0;
+  setHtml('d-identity-panel', `
+    <div class="row"><span class="lbl">Type</span><span class="val c-g">Artificial Intelligence (PRIVATE)</span></div>
+    <div class="row"><span class="lbl">Capability Score</span><span class="val c-b">${cap.toFixed(1)} / 100</span></div>
+    <div class="row"><span class="lbl">Evolution Stage</span><span class="val">${ev.stage||'—'}</span></div>
+    <div class="row"><span class="lbl">Inferences Completed</span><span class="val c-c">${snap.total_inferences||0}</span></div>
+    <div class="row"><span class="lbl">Training Examples</span><span class="val c-y">${snap.training_examples||0}</span></div>
+  `);
+}
+
+function renderModelPanel(m) {
+  if (!m) return;
+  setHtml('d-model-panel', `
+    <div class="row"><span class="lbl">Status</span>
+      <span class="val ${m.available?'c-g':'c-r'}">${m.available?'● online':'○ offline'}</span></div>
+    <div class="row"><span class="lbl">URL</span><span class="val mono">${m.url||'—'}</span></div>
+    <div class="row"><span class="lbl">Active Model</span><span class="val c-b mono">${m.active_model||m.models?.[0]||'—'}</span></div>
+    <div class="row"><span class="lbl">Available Models</span><span class="val">${(m.models||[]).length}</span></div>
+    <div class="row" style="border:none;flex-wrap:wrap;gap:4px;">
+      ${(m.models||[]).map(md=>`<span class="badge b-blue">${md}</span>`).join('')}</div>
+  `);
+}
+
+// ── Hive ───────────────────────────────────────────────────────────────────
+async function loadHive() {
+  try {
+    const d = await api('/api/hive');
+    _hiveData = d;
+    renderHive(d);
+    renderHiveSummary(d);
+  } catch(e) { console.warn('hive load failed:', e); }
+}
+
+async function probeHive() {
+  document.getElementById('hive-nodes-list').innerHTML = '<div class="c-d"><span class="spin"></span>Probing all nodes...</div>';
+  try {
+    const d = await api('/api/hive/probe');
+    renderHive(d);
+    loadContext();
+  } catch(e) { document.getElementById('hive-nodes-list').innerHTML = '<div class="c-r">Probe failed: ' + e.message + '</div>'; }
+}
+
+function renderHive(d) {
+  set('h-total', d.total_nodes||0);
+  set('h-online', d.online_nodes||0);
+  set('h-ollama', d.ollama_nodes||0);
+  set('h-models-count', (d.available_models||[]).length);
+
+  const types = {'queen':'👑','forge':'⚒️','compute':'🖥️','edge':'🔗'};
+  let html = '';
+  const allNodes = [];
+  for (const nodes of Object.values(d.by_type||{})) allNodes.push(...nodes);
+  for (const n of allNodes) {
+    const hasOl = n.ollama_online;
+    html += `<div class="hive-node ${hasOl?'has-ollama':'no-ollama'}">
+      <div class="hn-header">
+        <div class="hn-id">${types[n.node_type]||'○'} ${n.node_id}</div>
+        <div class="hn-badges">
+          <span class="badge ${n.online?'b-ok':'b-dim'}">${n.online?'online':'offline'}</span>
+          ${hasOl?`<span class="badge b-blue">Ollama</span>`:''}
+          <span class="badge b-dim">${n.node_type}</span>
+        </div>
+      </div>
+      <div class="hn-desc">${n.hostname} · ${n.ip}</div>
+      <div class="hn-desc">${n.description}</div>
+      ${hasOl?`<div class="hn-models">${(n.models||[]).join(' · ')||'no models'}</div>`:''}
+      ${hasOl?`<div class="hn-latency">Latency: ${n.latency_ms}ms</div>`:''}
+    </div>`;
+  }
+  document.getElementById('hive-nodes-list').innerHTML = html || '<div class="c-d">No nodes found.</div>';
+}
+
+function renderHiveSummary(d) {
+  const types = {'queen':'👑','forge':'⚒️','compute':'🖥️','edge':'🔗'};
+  let html = '';
+  const allNodes = [];
+  for (const nodes of Object.values(d.by_type||{})) allNodes.push(...nodes);
+  for (const n of allNodes) {
+    html += `<div class="row">
+      <span class="lbl">${types[n.node_type]||''} ${n.node_id}</span>
+      <span class="val">
+        <span class="badge ${n.ollama_online?'b-blue':n.online?'b-ok':'b-dim'}">
+          ${n.ollama_online?'Ollama':n.online?'online':'offline'}
+        </span>
+      </span>
+    </div>`;
+  }
+  setHtml('d-hive-list', html || '<div class="c-d">No hive data.</div>');
+}
+
+async function loadHiveSummary() {
+  const d = await api('/api/hive/probe');
+  renderHiveSummary(d);
+}
+
+// ── Tunnel ─────────────────────────────────────────────────────────────────
+async function loadTunnel() {
+  try {
+    const d = await api('/api/tunnel');
+    renderTunnel(d);
+    renderTunnelDashPanel(d.chain);
+  } catch(e) { console.warn('tunnel load failed:', e); }
+}
+
+function renderTunnel(d) {
+  const chain = d.chain || {};
+  const integ = d.integrity || {};
+
+  setHtml('tunnel-chain-info', `
+    <div class="row"><span class="lbl">Chain Length</span><span class="val c-p mono">${chain.chain_length||0} blocks</span></div>
+    <div class="row"><span class="lbl">Genesis Hash</span><span class="val mono c-d">${chain.genesis_hash||'—'}</span></div>
+    <div class="row"><span class="lbl">Latest Hash</span><span class="val mono c-d">${chain.latest_hash||'—'}</span></div>
+    <div class="row"><span class="lbl">Integrity</span>
+      <span class="val ${integ.valid?'c-g':'c-r'}">${integ.valid?'✓ Valid':'✗ INVALID'}</span></div>
+    <div class="row"><span class="lbl">Tunnel Version</span><span class="val">${chain.tunnel_version||'1.0'}</span></div>
+    <div class="row"><span class="lbl">Connectors Registered</span><span class="val">${chain.connectors_total||0}</span></div>
+    <div class="row" style="border:none"><span class="lbl">Connectors Online</span><span class="val c-g">${chain.connectors_online||0}</span></div>
+  `);
+
+  const connectors = d.connectors || [];
+  if (connectors.length === 0) {
+    setHtml('tunnel-connectors', '<div class="c-d" style="font-size:.78rem">No connectors registered yet. Any CVG application can connect via POST /api/tunnel/connect</div>');
+  } else {
+    setHtml('tunnel-connectors', connectors.map(c => `
+      <div class="row">
+        <span class="lbl mono">${c.connector_id}</span>
+        <span class="val"><span class="badge ${c.online?'b-ok':'b-err'}">${c.online?'online':'offline'}</span></span>
+      </div>`).join(''));
+  }
+
+  const blocks = d.recent_blocks || [];
+  const typeColor = t => t==='genesis'?'bt-genesis':t==='register'?'bt-register':
+    t==='heartbeat'?'bt-heartbeat':t==='context_push'?'bt-context_push':
+    t==='inference_response'?'bt-inference_response':t==='inference_request'?'bt-inference_request':
+    t==='deploy_event'?'bt-deploy_event':t==='audit_event'?'bt-audit_event':'';
+  document.getElementById('tunnel-blocks').innerHTML = blocks.slice(0,15).map(b => `
+    <div class="block-item">
+      <div class="blk-hdr">
+        <span class="blk-type ${typeColor(b.msg_type)}">${b.msg_type}</span>
+        <span class="blk-meta">${b.source} → ${b.target} · ${ts(b.timestamp)}</span>
+      </div>
+      <div class="blk-hash">${b.hash}</div>
+    </div>`).join('') || '<div class="c-d">No blocks yet.</div>';
+}
+
+function renderTunnelDashPanel(chain) {
+  if (!chain) return;
+  const integ = chain.chain_valid !== undefined ? chain : {chain_valid: true};
+  setHtml('d-tunnel-info', `
+    <div class="row"><span class="lbl">Chain Length</span><span class="val c-p">${chain.chain_length||0} blocks</span></div>
+    <div class="row"><span class="lbl">Integrity</span><span class="val ${chain.chain_valid!==false?'c-g':'c-r'}">${chain.chain_valid!==false?'✓ Valid':'✗ Invalid'}</span></div>
+    <div class="row"><span class="lbl">Connectors</span><span class="val">${chain.connectors_total||0} registered · ${chain.connectors_online||0} online</span></div>
+    <div class="row" style="border:none"><span class="lbl">Genesis</span><span class="val mono c-d">${chain.genesis_hash||'—'}</span></div>
+  `);
+}
+
+async function getToken() {
+  const id = document.getElementById('token-connector-id').value.trim();
+  if (!id) return;
+  const d = await api(`/api/tunnel/token/${encodeURIComponent(id)}`);
+  document.getElementById('token-result').textContent =
+    `Token for '${id}':\n${d.token}`;
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+function chatKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }
+function autoH(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 100) + 'px'; }
+function clearChat() {
+  chatHistory = [];
+  document.getElementById('chat-msgs').innerHTML = `
+    <div class="msg assistant">
+      <div class="msg-av">N</div>
+      <div class="bubble">Chat cleared. Ask me anything about CVG infrastructure, GIS, or the Hive.</div>
+    </div>`;
+}
+async function sendChat() {
+  const inp = document.getElementById('chat-in');
+  const btn = document.getElementById('btn-send');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = ''; inp.style.height = 'auto';
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>…';
+  addMsg('user', msg);
+  chatHistory.push({role:'user', content:msg});
+  const typing = addTyping();
+  try {
+    const useLive = document.getElementById('chat-live-ctx').checked;
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: msg, history: chatHistory.slice(-10), use_live_context: useLive})
+    });
+    const d = await resp.json();
+    typing.remove();
+    const reply = d.response || d.detail || 'No response';
+    addMsg('assistant', reply);
+    chatHistory.push({role:'assistant', content:reply});
+  } catch(e) {
+    typing.remove();
+    addMsg('assistant', `Error: ${e.message}`);
+  }
+  btn.disabled = false; btn.innerHTML = 'Send';
+}
+function addMsg(role, content) {
+  const c = document.getElementById('chat-msgs');
+  const d = document.createElement('div');
+  d.className = `msg ${role}`;
+  d.innerHTML = `<div class="msg-av">${role==='assistant'?'N':'A'}</div>
+    <div class="bubble">${esc(content)}</div>`;
+  c.appendChild(d); c.scrollTop = c.scrollHeight; return d;
+}
+function addTyping() {
+  const c = document.getElementById('chat-msgs');
+  const d = document.createElement('div');
+  d.className = 'msg assistant';
+  d.innerHTML = '<div class="msg-av">N</div><div class="bubble"><span class="spin"></span>Thinking via Hive...</div>';
+  c.appendChild(d); c.scrollTop = c.scrollHeight; return d;
+}
+
+// ── Analysis ───────────────────────────────────────────────────────────────
+async function runAnalysis(mode) {
+  const resEl = document.getElementById('ana-result');
+  const lbl   = document.getElementById('ana-label');
+  const copy  = document.getElementById('ana-copy');
+  const btn   = document.getElementById(`abtn-${mode}`);
+  resEl.textContent = 'Pulling live context from CVG engines and routing inference via Hive...\nThis may take 20–90s.';
+  lbl.textContent   = `Analyzing: ${mode}...`;
+  copy.style.display = 'none';
+  if (btn) btn.classList.add('running');
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mode})
+    });
+    const d = await resp.json();
+    const text = d.analysis || d.report || d.response || JSON.stringify(d, null, 2);
+    resEl.textContent = text;
+    lbl.textContent   = `${mode} — ${d.model||'cvg-neuron'}`;
+    copy.style.display = 'inline-block';
+  } catch(e) {
+    resEl.textContent = `Error: ${e.message}`;
+  }
+  if (btn) btn.classList.remove('running');
+}
+async function runAnalysisMode(mode) {
+  const service = document.getElementById('deploy-service').value.trim() || 'unknown';
+  const version = document.getElementById('deploy-version').value.trim() || 'unknown';
+  const resEl = document.getElementById('ana-result');
+  resEl.textContent = 'Running deployment analysis...';
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mode, service, version})
+    });
+    const d = await resp.json();
+    resEl.textContent = d.analysis || JSON.stringify(d, null, 2);
+  } catch(e) { resEl.textContent = `Error: ${e.message}`; }
+}
+async function runReport() {
+  const resEl = document.getElementById('ana-result');
+  resEl.textContent = 'Generating daily intelligence report from memory + observations...';
+  try {
+    const d = await api('/api/report');
+    resEl.textContent = d.report || JSON.stringify(d, null, 2);
+    document.getElementById('ana-label').textContent = 'Daily Report — ' + (d.model||'cvg-neuron');
+    document.getElementById('ana-copy').style.display = 'inline-block';
+  } catch(e) { resEl.textContent = `Error: ${e.message}`; }
+}
+function copyResult() {
+  navigator.clipboard.writeText(document.getElementById('ana-result').textContent).then(() => {
+    const b = document.getElementById('ana-copy');
+    b.textContent = 'Copied!';
+    setTimeout(() => b.textContent = 'Copy', 1500);
+  });
+}
+
+// ── Memory ─────────────────────────────────────────────────────────────────
+async function loadMemory() {
+  try {
+    const [stats, warnings, patterns, events] = await Promise.all([
+      api('/api/memory'),
+      api('/api/memory/warnings'),
+      api('/api/memory/patterns'),
+      api('/api/memory/events?limit=20'),
+    ]);
+    setHtml('mem-stats', Object.entries(stats).map(([k,v]) =>
+      `<div class="row"><span class="lbl">${k}</span><span class="val mono">${v}</span></div>`).join(''));
+
+    const ws = warnings.warnings || [];
+    setHtml('mem-warnings', ws.length ? ws.slice(0,10).map(w =>
+      `<div class="row"><span class="lbl"><span class="badge ${w.severity==='critical'?'b-err':'b-warn'}">${w.severity}</span> ${w.subject}</span>
+       <span class="val c-d" style="font-size:.68rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;">${w.detail.slice(0,80)}</span></div>`).join('')
+      : '<div class="c-g" style="font-size:.78rem">No active warnings.</div>');
+
+    const ps = (patterns.patterns||[]).slice(0,15);
+    setHtml('mem-patterns', ps.length ? ps.map(p =>
+      `<div class="row"><span class="lbl mono" style="font-size:.7rem;flex:1">${p.pattern_key}</span>
+       <span class="val"><span class="badge b-blue">${p.occurrences}x</span></span></div>`).join('')
+      : '<div class="c-d" style="font-size:.78rem">No patterns yet.</div>');
+
+    const evs = (events.events||[]).slice(0,10);
+    setHtml('mem-events', evs.length ? evs.map(e =>
+      `<div class="row"><span class="lbl"><span class="badge b-dim">${e.event_type}</span> ${e.service||''}</span>
+       <span class="val c-d">${ts(e.ts)}</span></div>`).join('')
+      : '<div class="c-d" style="font-size:.78rem">No events.</div>');
+  } catch(e) { console.warn('memory load failed:', e); }
+}
+
+// ── Infrastructure ─────────────────────────────────────────────────────────
+async function loadInfra() {
+  try {
+    const d = await api('/api/infrastructure/health');
+    const rows = Object.entries(d).map(([id, info]) => `
+      <div class="row">
+        <span class="lbl">${info.label||id} <span class="c-d mono" style="font-size:.65rem">${info.response_ms||0}ms</span></span>
+        <span class="val"><span class="badge ${info.healthy?'b-ok':'b-err'}">${info.healthy?'healthy':'down'}</span></span>
+      </div>`).join('');
+    setHtml('infra-health', rows || '<div class="c-d">No data.</div>');
+  } catch(e) { setHtml('infra-health', `<div class="c-r">Load failed: ${e.message}</div>`); }
+}
+
+// ── Identity operations ─────────────────────────────────────────────────────
+async function genModelfile() {
+  document.getElementById('modelfile-result').textContent = 'Generating evolved Modelfile...';
+  try {
+    const resp = await fetch('/api/identity/modelfile');
+    if (resp.ok) {
+      const savedTo = resp.headers.get('X-Saved-To') || '/data/neuron/Modelfile.evolved';
+      document.getElementById('modelfile-result').textContent = `✓ Evolved Modelfile saved to ${savedTo}\n\nTo upgrade cvg-neuron:\n  ollama create cvg-neuron:v1.5 -f ${savedTo}`;
+    } else {
+      document.getElementById('modelfile-result').textContent = 'Failed: ' + resp.status;
+    }
+  } catch(e) {
+    document.getElementById('modelfile-result').textContent = 'Error: ' + e.message;
+  }
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+async function api(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+function set(id, v) { const e = document.getElementById(id); if (e) e.textContent = v; }
+function setHtml(id, v) { const e = document.getElementById(id); if (e) e.innerHTML = v; }
+function dot(id, color) {
+  const e = document.getElementById(id);
+  if (!e) return;
+  e.className = `dot dot-${color}`;
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+function ts(epoch) {
+  if (!epoch) return '—';
+  return new Date(epoch * 1000).toLocaleTimeString('en-US', {hour12: false});
+}
+</script>
+</body>
+</html>

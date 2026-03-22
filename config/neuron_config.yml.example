@@ -1,0 +1,64 @@
+# CVG Neuron — Configuration Example
+# (c) Clearview Geographic, LLC — Proprietary
+# 
+# Copy to neuron_config.yml and adjust for your environment.
+# This file is volume-mounted into the container (read-only).
+# Most values can also be set via environment variables in docker-compose.yml.
+
+neuron:
+  version: "1.0.0"
+  port: 8095
+  environment: production  # production | development
+
+# ─── Ollama LLM Backend ───────────────────────────────────────────────────────
+ollama:
+  host: "http://10.10.10.200:11434"
+  default_model: "llama3.1:8b"
+  # Alternative models (must be pulled first):
+  # - llama3.1:70b   (higher quality, much slower)
+  # - llama3.2:3b    (faster, lower quality)
+  # - codellama:13b  (code analysis focus)
+  timeout_seconds: 120
+
+# ─── CVG Engine URLs ──────────────────────────────────────────────────────────
+# These use Docker network hostnames when running in the same network.
+# Override with external IPs for cross-host deployments.
+engines:
+  git:
+    url: "http://cvg-gitengine-v1:8092"
+    health_path: "/health"
+    data_path: "/api/repos/summary"
+  dns:
+    url: "http://cvg-dns-v1:8094"
+    health_path: "/health"
+    data_path: "/api/health"
+  container:
+    url: "http://cvg-container-v1:8091"
+    health_path: "/health"
+    data_path: "/api/status"
+  audit:
+    url: "http://cvg-audit-results-v1:8096"
+    health_path: "/health"
+    data_path: "/api/results/latest"
+
+# ─── Security ────────────────────────────────────────────────────────────────
+security:
+  internal_api_key: "cvg-internal-2026"
+  # Rate limiting (requests per minute per IP)
+  rate_limit: 60
+
+# ─── Context Cache ────────────────────────────────────────────────────────────
+context:
+  cache_ttl_seconds: 300     # 5 minutes
+  warmup_on_start: true
+  refresh_interval_minutes: 5
+
+# ─── Analysis History ────────────────────────────────────────────────────────
+history:
+  max_entries: 50
+  persist: false   # Set true to write history to /app/data/history/
+
+# ─── Logging ─────────────────────────────────────────────────────────────────
+logging:
+  level: INFO   # DEBUG | INFO | WARNING | ERROR
+  format: "json"  # json | plain
