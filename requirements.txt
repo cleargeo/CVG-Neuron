@@ -1,0 +1,45 @@
+# =============================================================================
+# CVG Neuron — AI Orchestration System v2.0.0
+# (c) Clearview Geographic, LLC — Proprietary
+# =============================================================================
+
+# ── Core Web Framework ────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+aiofiles==23.2.1
+
+# ── HTTP Client ───────────────────────────────────────────────────────────────
+httpx==0.28.0
+
+# ── Data Validation & Settings ────────────────────────────────────────────────
+pydantic==2.10.3
+pydantic-settings==2.6.1
+pyyaml==6.0.2
+
+# ── Authentication & Security ─────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# ── Resilience & Retry ────────────────────────────────────────────────────────
+tenacity==8.5.0
+
+# ── Scheduler ─────────────────────────────────────────────────────────────────
+apscheduler==3.10.4
+python-dateutil==2.9.0
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+structlog==24.4.0
+
+# ── Observability / Metrics ───────────────────────────────────────────────────
+prometheus-client==0.21.0
+
+# ── System Monitoring ─────────────────────────────────────────────────────────
+psutil==6.1.0
+
+# ── Database (async SQLite) ───────────────────────────────────────────────────
+aiosqlite==0.20.0
+SQLAlchemy==2.0.36
+
+# ── Redis (optional — NeuroCache remote tier) ─────────────────────────────────
+redis==5.2.1
