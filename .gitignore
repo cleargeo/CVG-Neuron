@@ -1,5 +1,5 @@
-# CVG Neuron — .gitignore
-# (c) Clearview Geographic LLC — All Rights Reserved
+# CVG-Neuron .gitignore
+# (c) Clearview Geographic LLC — Proprietary
 
 # ── Broken/leftover git dirs from NAS session crashes ────────────────────────
 .git_broken/
@@ -30,13 +30,13 @@ env/
 *.env.*
 !*.env.example
 
-# ── Logs / data ───────────────────────────────────────────────────────────────
+# ── Logs / data ──────────────────────────────────────────────────────────────
 *.log
 data/
 config/neuron_config.yml
 !config/neuron_config.yml.example
 
-# ── OS artifacts ─────────────────────────────────────────────────────────────
+# ── OS artifacts ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 Desktop.ini
@@ -64,3 +64,10 @@ neuron/test123.py
 neuron/test_ps.py
 neuron/test_write.py
 neuron/verify_write.py
+
+# ── Compliance enforcement ────────────────────────────────────────────────────
+# DO NOT GITIGNORE THESE — compliance documents must be committed
+# .cleargeo-compliance
+# COMPLIANCE_AUDIT_REPORT.md
+# SANITIZATION_GUIDE.md
+# .cleargeo-pre-commit-hook

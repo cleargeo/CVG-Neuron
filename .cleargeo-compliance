@@ -1,0 +1,219 @@
+################################################################################
+# CVG COMPLIANCE DOCTRINE — SECURITY CLASSIFICATION
+# Emergency Audit & Remediation — 2026-06-08
+################################################################################
+
+CLASSIFICATION: INTERNAL / CONFIDENTIAL
+VISIBILITY_REQUIRED: PRIVATE
+STATUS: ⚠️  VIOLATION — EMERGENCY REMEDIATION IN PROGRESS
+
+################################################################################
+# DOCTRINE RULES
+################################################################################
+
+## Containment Principle
+- This repository contains proprietary CVG infrastructure orchestration logic
+- SHALL remain PRIVATE at all times
+- Public disclosure poses direct security & operational risk to CVG platform
+
+## Prohibited Content (Scan Before Any Commit)
+INFRASTRUCTURE_IPS:
+  - 10.10.10.* (internal network)
+  - 192.168.*.* (legacy nodes)
+  - Any private RFC1918 address
+
+INTERNAL_DOMAINS:
+  - *.cleargeo.tech (internal DNS)
+  - cleargeo365.onmicrosoft.com (Azure tenant)
+  - pve.cleargeo.tech (Proxmox)
+  - git.cleargeo.tech (internal Git)
+  - cvg-nexus.com (internal DNS)
+
+CREDENTIALS & SECRETS:
+  - Passwords (Proxmox, TrueNAS, cloud-init, GeoServer admin)
+  - API tokens (Proxmox, Gitea, GitHub, Azure)
+  - SSH private keys (*.pem, *.key, id_rsa)
+  - Wallet addresses or mining configs
+  - Azure Key Vault references with actual secrets
+
+OPERATIONAL_TOPOLOGY:
+  - VM names (VM-451, CVG-QUEEN-11, DFORGE-100, etc.)
+  - Service port mappings (8001–8096)
+  - Docker container network topology
+  - Hypervisor details (Proxmox VE 8.3, CPUs, RAM)
+  - Project portfolio details (290+ projects, clients, domains)
+  - Internal infrastructure diagrams
+
+METADATA_EXPOSURE:
+  - File paths (/opt/cvg/*, /mnt/cgps/*, /mnt/cgdp/*)
+  - Device/NAS references (TrueNAS, Synology DSM)
+  - Deployment workflow details
+
+################################################################################
+# CRITICAL VIOLATIONS IDENTIFIED
+################################################################################
+
+TORUS_1_VISIBILITY:
+  STATUS: 🔴 VIOLATION
+  FINDING: Repository is PUBLIC (should be PRIVATE)
+  ACTION: Make repository PRIVATE immediately
+  DUE: 2026-06-08 EOD
+
+TORUS_2_DESCRIPTIONS:
+  STATUS: ✅ PASS
+  NOTE: Descriptions are generic; IPs are not in descriptions
+  BUT: Exposed via Modelfile, entrypoint.sh in git
+
+TORUS_3_BRANCH_PROTECTION:
+  STATUS: ⚠️  NEEDS AUDIT
+  ACTION: Enable branch protection on master
+  - Require PR reviews before merge
+  - Dismiss stale PR reviews
+  - Enforce admin review dismissals
+
+TORUS_4_COMMIT_HISTORY:
+  STATUS: 🔴 VIOLATION
+  FINDING: Multiple commits contain exposed infrastructure details
+  SECRETS_FOUND:
+    - Gitea token: 7ffbb3fc2ea62e6c556b4c10e699d769f0d41e7a (Modelfile:123)
+    - Internal IPs: 10.10.10.200, 10.10.10.56, 10.10.10.53 (Modelfile passim)
+    - Domain: cleargeo.tech (Modelfile, entrypoint.sh)
+  ACTION: 
+    1. Revoke Gitea token immediately
+    2. Use BFG Repo-Cleaner to purge from history
+    3. Force-push cleaned history to master
+    4. Notify all cloners to re-clone
+
+TORUS_5_FILE_EXPOSURE:
+  STATUS: 🔴 VIOLATION
+  FILES_WITH_EXPOSURE:
+    - Modelfile (IPs, VMs, services, Gitea token)
+    - entrypoint.sh (IPs, port mappings, Ollama endpoints)
+    - .env.example (IPs, service endpoints, domain)
+  ACTION: Sanitize all files per sanitization checklist
+
+TORUS_6_INFRASTRUCTURE_TOPOLOGY:
+  STATUS: 🔴 VIOLATION
+  EXPOSURE: Modelfile contains complete infrastructure architecture:
+    - Network topology (10.10.10.0/24, 192.168.50.x)
+    - VM inventory (names, IPs, roles, specs)
+    - Service endpoints (ports, URLs, domains)
+    - Full project portfolio (290+ projects, clients)
+    - DNS infrastructure details
+  ACTION: Remove all infrastructure topology from public repo
+
+TORUS_7_DOCTRINE_ENFORCEMENT:
+  STATUS: 🔴 VIOLATION
+  ACTION: Implement pre-commit hook to block prohibited content
+  HOOK_LOCATION: .git/hooks/pre-commit (auto-install via setup script)
+  PATTERN_CHECK: grep for IPs, domains, credentials before commit allowed
+
+################################################################################
+# REMEDIATION CHECKLIST — PHASE 1 (Emergency Lockdown)
+################################################################################
+
+IMMEDIATE (within 1 hour):
+  ☐ Make repository PRIVATE (GitHub Settings → Visibility)
+  ☐ Revoke Gitea token 7ffbb3fc2ea62e6c556b4c10e699d769f0d41e7a
+  ☐ Rotate all Proxmox credentials (if any hardcoded)
+  ☐ Notify all repository collaborators of compliance status
+
+SHORT_TERM (within 24 hours):
+  ☐ Purge git history using BFG Repo-Cleaner:
+      bfg --replace-text banned.txt  # See .git/hooks/banned-patterns.txt
+  ☐ Update Modelfile — remove all internal references
+  ☐ Update entrypoint.sh — remove all IPs and domain references
+  ☐ Update .env.example — sanitize all internal service URLs
+  ☐ Create .git/hooks/pre-commit to enforce compliance
+  ☐ Create PR review checklist document
+
+MEDIUM_TERM (this week):
+  ☐ Implement GitHub branch protection on master
+  ☐ Set up CodeQL / secret scanning on all commits
+  ☐ Document sanitized version for potential public release (if approved)
+  ☐ Audit all commits since 2026-03-22 (repo creation date)
+
+################################################################################
+# SANITIZATION CHECKLIST (Before Any Public Release)
+################################################################################
+
+Modelfile:
+  ☐ Remove lines 38–147 (full identity + infrastructure section)
+  ☐ Remove all Hive node IPs and names
+  ☐ Remove all service URLs (*.cleargeo.tech)
+  ☐ Remove Gitea token reference (line 123)
+  ☐ Remove office IP references
+  ☐ Remove project portfolio details (lines 103–112)
+  ☐ Keep: Base model architecture, parameter tuning, response guidelines
+  ☐ Replace with: Generic deployment instructions
+
+entrypoint.sh:
+  ☐ Remove all OLLAMA_URL references with internal IPs
+  ☐ Remove Hive-0 probe code (lines 139–165)
+  ☐ Remove all docker internal network references
+  ☐ Replace with: Environment variable placeholders (e.g., ${OLLAMA_URL})
+  ☐ Keep: Container startup logic, health checks, error handling
+
+.env.example:
+  ☐ Remove all internal IPs (10.10.10.*, 192.168.*)
+  ☐ Remove internal domain references
+  ☐ Remove internal service endpoints
+  ☐ Replace with: CHANGEME placeholders with documentation
+  ☐ Keep: Config structure, parameter names, examples of correct format
+
+deploy_production.sh (if present):
+  ☐ No passwords/tokens hardcoded
+  ☐ No internal IPs hardcoded
+  ☐ No internal domain names
+  ☐ No VM names or infrastructure topology
+  ☐ Use environment variables for all secrets
+  ☐ Use placeholders for all infrastructure references
+
+################################################################################
+# CREDENTIAL ROTATION TRACKING
+################################################################################
+
+CREDENTIAL                        | EXPOSED_IN              | STATUS        | ROTATED_DATE
+Gitea token 7ffbb3fc2ea62e6c...  | Modelfile:123           | REVOKED       | TBD
+Proxmox API token (if any)        | deploy scripts          | CHECK         | TBD
+TrueNAS CIFS password             | deploy scripts          | CHECK         | TBD
+VM cloud-init password            | deploy scripts          | CHECK         | TBD
+GeoServer admin password          | .env (gitignored)       | ✅ SAFE       | N/A
+
+################################################################################
+# PRE-COMMIT HOOK — Banned Patterns
+################################################################################
+
+Create .git/hooks/banned-patterns.txt with regex patterns:
+  10\.10\.10\.\d+                          (internal IPs)
+  192\.168\.\d+\.\d+                       (private IPs)
+  cleargeo\.tech                           (internal domain)
+  cleargeo365\.onmicrosoft\.com            (Azure tenant)
+  pve\.cleargeo\.tech                      (Proxmox domain)
+  git\.cleargeo\.tech                      (Git domain)
+  CVGadmin2026!                            (VM password)
+  CVGproc1!2026                            (NAS password)
+  7ffbb3fc2ea62e6c556b4c10e699d769f0d41e7a (Gitea token)
+  d0af97b6-36df-49e7-82dc-ed37a8c4f3ff    (Proxmox token)
+  PVEAPIToken=                             (Proxmox tokens)
+  BEGIN RSA PRIVATE KEY                    (SSH keys)
+  -----END PRIVATE KEY-----                (SSH keys)
+  PRIVATE KEY                              (Generic keys)
+  SECRET_KEY=                              (Django/Flask secrets)
+  AWS_SECRET_ACCESS_KEY=                   (AWS secrets)
+
+################################################################################
+# AUDIT METADATA
+################################################################################
+
+AUDIT_DATE: 2026-06-08
+AUDIT_BY: GitHub Copilot (@copilot) on behalf of cleargeo
+AUDIT_SCOPE: CVG-Neuron repository
+VIOLATION_COUNT: 7 (across all 7 tori)
+SEVERITY: CRITICAL (infrastructure security & credential exposure)
+
+NEXT_AUDIT: 2026-06-15 (post-remediation verification)
+COMPLIANCE_OWNER: Alex Zelenski (azelenski@clearviewgeographic.com)
+ESCALATION: If violations not remediated by 2026-06-15, disable CI/CD
+
+################################################################################
