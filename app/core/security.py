@@ -23,7 +23,7 @@ from app.core.logger import get_logger
 log = get_logger("security")
 
 # ── Password hashing ──────────────────────────────────────────────────────────
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Note: Using bcrypt directly instead of passlib (passlib 1.7.4 is incompatible with bcrypt 4.x/5.x)
 
 # ── HTTP security schemes ─────────────────────────────────────────────────────
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -132,11 +132,15 @@ def create_service_token(service_name: str, ttl_hours: int = 24) -> str:
 # ── Password utilities ────────────────────────────────────────────────────────
 
 def hash_password(plain_password: str) -> str:
-    return pwd_context.hash(plain_password)
+    """Hash a password using bcrypt directly (passlib-free)."""
+    import bcrypt
+    return bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against a bcrypt hash directly (passlib-free)."""
+    import bcrypt
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("ascii"))
 
 
 def generate_api_key() -> str:

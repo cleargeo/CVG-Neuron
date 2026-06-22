@@ -73,7 +73,6 @@ class TokenResponse(BaseModel):
 @router.post(
     "/login",
     summary="Authenticate and get JWT token",
-    response_model=NeuronResponse,
 )
 async def login(credentials: UserLogin) -> NeuronResponse:
     """
@@ -110,16 +109,27 @@ async def login(credentials: UserLogin) -> NeuronResponse:
     )
 
     from app.core.config import settings
+    result = TokenResponse(
+        access_token=token,
+        expires_in=settings.access_token_expire_minutes * 60,
+        user_id=user.user_id,
+        username=user.username,
+        roles=user.roles,
+    )
+    log.info("LOGIN_OK", user=user.username, token_len=len(token))
     return NeuronResponse.ok(
-        data=TokenResponse(
-            access_token=token,
-            expires_in=settings.access_token_expire_minutes * 60,
-            user_id=user.user_id,
-            username=user.username,
-            roles=user.roles,
-        ).model_dump(),
+        data=result.model_dump(),
         message="Authentication successful",
     )
+
+
+@router.post(
+    "/login2",
+    summary="Debug login (minimal)",
+)
+async def login2(credentials: dict) -> dict:
+    """Minimal login for debugging."""
+    return {"status": "ok", "user": credentials.get("username")}
 
 
 @router.get(

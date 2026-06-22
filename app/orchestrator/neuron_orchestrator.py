@@ -262,10 +262,18 @@ class NeuronOrchestrator:
             else 0.0
         )
 
-        # Check CVG subsystem connectivity
-        hive_ok = await self.hive.health_check()
-        comb_ok = await self.comb.health_check()
-        obs_ok = await self.observability.health_check()
+        # Check CVG subsystem connectivity (concurrent, with overall timeout)
+        try:
+            hive_ok, comb_ok, obs_ok = await asyncio.wait_for(
+                asyncio.gather(
+                    self.hive.health_check(),
+                    self.comb.health_check(),
+                    self.observability.health_check(),
+                ),
+                timeout=6.0,
+            )
+        except (asyncio.TimeoutError, Exception):
+            hive_ok, comb_ok, obs_ok = False, False, False
 
         status = "healthy"
         if not hive_ok or not comb_ok:
@@ -297,7 +305,12 @@ class NeuronOrchestrator:
             else 0.0
         )
 
-        hive_nodes = await self.hive.get_online_nodes()
+        try:
+            hive_nodes = await asyncio.wait_for(
+                self.hive.get_online_nodes(), timeout=6.0
+            )
+        except (asyncio.TimeoutError, Exception):
+            hive_nodes = []
 
         total = self._tasks_completed + self._tasks_failed
         success_rate = self._tasks_completed / total if total > 0 else 1.0
