@@ -76,22 +76,32 @@ async def _fetch(client: httpx.AsyncClient, url: str, label: str) -> dict:
 
 
 async def fetch_git_context(client: httpx.AsyncClient) -> dict:
-    """Pull summary data from the Git Engine (GET /api/summary)."""
-    return await _fetch(client, f"{GIT_ENGINE_URL}/api/summary", "git_engine")
+    """Pull summary data from the Git Engine (GET /api/summary).
+    Gracefully handles unreachable/local-dev scenarios."""
+    result = await _fetch(client, f"{GIT_ENGINE_URL}/api/summary", "git_engine")
+    if result["status"] != "ok":
+        result["data"] = {"status": "_not_running_locally", "note": "Git Engine not available on this host"}
+    return result
 
 
 async def fetch_dns_context(client: httpx.AsyncClient) -> dict:
-    """Pull status from the DNS Engine (GET /api/status — richer than /api/health)."""
-    return await _fetch(client, f"{DNS_ENGINE_URL}/api/status", "dns_engine")
+    """Pull status from the DNS Engine (GET /api/status).
+    Gracefully handles unreachable/local-dev scenarios."""
+    result = await _fetch(client, f"{DNS_ENGINE_URL}/api/status", "dns_engine")
+    if result["status"] != "ok":
+        result["data"] = {"status": "_not_running_locally", "note": "DNS Engine not available on this host"}
+    return result
 
 
 async def fetch_container_context(client: httpx.AsyncClient) -> dict:
     """
     Pull deep container visibility from the Containerization Engine.
-    Fetches both the static summary (/api/summary) and live container state
-    (/api/containers/live — real-time SSH poll of all Docker hosts).
+    Gracefully handles unreachable/local-dev scenarios.
     """
     summary_res = await _fetch(client, f"{CONTAINER_ENGINE_URL}/api/summary", "container_engine")
+    if summary_res["status"] != "ok":
+        summary_res["data"] = {"status": "_not_running_locally", "note": "Container Engine not available on this host"}
+        return summary_res
     live_res    = await _fetch(client, f"{CONTAINER_ENGINE_URL}/api/containers/live", "container_live")
     telemetry_res = await _fetch(client, f"{CONTAINER_ENGINE_URL}/api/telemetry", "container_telemetry")
 

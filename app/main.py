@@ -26,7 +26,7 @@ from app.models.response import ErrorResponse
 from app.orchestrator.neuron_orchestrator import NeuronOrchestrator
 from app.routers import (
     dashboard, info, permissions, predict, process, settings as settings_router,
-    status as status_router, train, users,
+    status as status_router, train, users, webhooks,
 )
 
 # ── Configure logging first ───────────────────────────────────────────────────
@@ -207,6 +207,7 @@ app.include_router(settings_router.router)
 app.include_router(users.router)
 app.include_router(permissions.router)
 app.include_router(info.router)
+app.include_router(webhooks.router)
 
 
 # ── Dev server entry point ────────────────────────────────────────────────────

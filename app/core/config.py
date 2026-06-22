@@ -123,14 +123,14 @@ class Settings(BaseSettings):
 
     # Accepts OLLAMA_BASE_URL (canonical), OLLAMA_URL, or OLLAMA_HOST from .env
     ollama_base_url: str = Field(
-        default="http://192.168.100.38:11434",
+        default="http://127.0.0.1:11434",
         validation_alias=AliasChoices(
             "ollama_base_url", "OLLAMA_BASE_URL", "OLLAMA_URL", "OLLAMA_HOST"
         ),
     )
     # Accepts OLLAMA_DEFAULT_MODEL (canonical) or OLLAMA_MODEL from .env
     ollama_default_model: str = Field(
-        default="llama3.2",
+        default="cvg-neuron",
         validation_alias=AliasChoices(
             "ollama_default_model", "OLLAMA_DEFAULT_MODEL", "OLLAMA_MODEL"
         ),

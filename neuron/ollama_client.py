@@ -19,7 +19,7 @@ import httpx
 logger = logging.getLogger("cvg.neuron.ollama")
 
 # Environment-driven configuration
-OLLAMA_HOST    = os.getenv("OLLAMA_HOST", os.getenv("OLLAMA_URL", "http://10.10.10.200:11434"))
+OLLAMA_HOST    = os.getenv("OLLAMA_HOST", os.getenv("OLLAMA_URL", "http://127.0.0.1:11434"))
 DEFAULT_MODEL  = os.getenv("OLLAMA_MODEL", "cvg-neuron")
 _read_timeout  = float(os.getenv("OLLAMA_TIMEOUT", "300"))
 
