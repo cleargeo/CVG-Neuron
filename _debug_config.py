@@ -1,0 +1,11 @@
+from app.core.config import settings
+print("DB:", settings.database_url)
+print("Redis:", settings.redis_url)
+print("Hive:", settings.hive_endpoint)
+print("Hive node 0:", settings.hive_node_0)
+print("COMB:", settings.comb_endpoint)
+print("Obs:", settings.observability_endpoint, "enabled:", settings.observability_enabled)
+print("Ollama:", settings.ollama_base_url)
+print("Provider:", settings.default_ai_provider)
+print("Log level:", settings.log_level)
+print("Env:", settings.environment)
